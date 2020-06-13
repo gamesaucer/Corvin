@@ -1,0 +1,17 @@
+{
+  "name": "js-corvin",
+  "version": "1.0.0",
+  "description": "Transpiles Corvin code to JS",
+  "main": "index.js",
+  "scripts": {},
+  "author": "gamesaucer",
+  "license": "UNLICENSED",
+  "bin": {
+    "js-corvin": "./bin/js-corvin.js"
+  },
+  "private": true,
+  "dependencies": {
+    "chalk": "^4.1.0",
+    "yargs": "^15.3.1"
+  }
+}
