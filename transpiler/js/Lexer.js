@@ -1,22 +1,29 @@
 module.exports = { lex }
 
 const Token = require('./util/Token')
+const out = require('./Console')
 
-function lex (str) {
+function lex (str, f) {
+  str = str.replace(/\r\n|\r|\n/, '\n') + '\0'
+
   const tokens = []
   const strCopy = str
 
   var pos = 0
   var token
   while ((token = getToken(str))) {
-    str = str.slice(token.symbol.length)
+    str = str.slice(token.length)
     if (token.type !== null) {
       const s = strCopy.slice(0, pos)
-      token.row = (s.match(/\r\n|\r|\n/g) || []).length
-      token.col = pos - ((l) => l >= 0 ? l + 1 : 0)(s.lastIndexOf('\n'))// pos - ((s.lastIndexOf('\n') + 1 || 1) - 1)
+      token.row = (s.match(/\n/g) || []).length + 1
+      token.col = pos - (l => l >= 0 ? l + 1 : 0)(s.lastIndexOf('\n'))
       tokens.push(token)
+      if (token.symbol instanceof Error) {
+        out.print.error([token.symbol.message], [{ row: token.row, col: token.col, file: f, name: token.type }], { str: strCopy, pos })
+        process.exit(1)
+      }
     }
-    pos += token.symbol.length
+    pos += token.length
   }
   return tokens
 }
@@ -25,7 +32,7 @@ function getToken (str) {
   for (const t of types) {
     const match = t.r instanceof RegExp ? str.match(t.r) : arrayify(t.r(str))
     if (match) {
-      return new Token(t.n !== undefined ? t.n : match[0], 0, 0, match[0])
+      return new Token(t.n !== undefined ? t.n : match[0], 0, 0, match[1] || match[0], match[1] ? match[0].length : null)
     }
   }
   return false
@@ -40,8 +47,8 @@ const types = [
   { n: null, r: /^\/\/.*/ },
   { n: null, r: matchNestedBlockComment },
 
-  { n: 'LIT_STR_NOESC', r: /^""".*?(?<!\\)(?:\\\\)*"""/ },
-  { n: 'LIT_STR', r: /^".*?(?<!\\)(?:\\\\)*"/ },
+  { n: 'LIT_STR_NOESC', r: /^"""(.*?)"""/ },
+  { n: 'LIT_STR', r: /^"(.*?(?<!\\)(?:\\\\)*)"/ },
 
   // TODO: add (?![^]), adding all reserved characters to the character list.
   // This means that a space will be required between numbers and words.
@@ -108,8 +115,13 @@ const types = [
   { n: 'OP_MAYBE', r: /^\?/ },
   { n: 'OP_OF', r: /^:/ },
 
-  // Misc reserved characters
-  { r: /^[=?:()[\]{}<>@#]/ }
+  { n: 'IDENTIFIER', r: /^[a-zA-Z_$][\w$]*/ },
+  { n: 'EOF', r: /^\0/ },
+
+  // Misc reserved characters, temporary { r: /^[=?:()[\]{}<>@#]/ },
+
+  { n: 'LIT_STR', r: findUnexpectedEOF('^".*?(?<!\\\\)(?:\\\\\\\\)*', '"', 'LIT_STR') },
+  { n: 'LIT_STR_NOESC', r: findUnexpectedEOF('^""".*?', '"""', 'LIT_STR_NOESC') }
 ]
 
 function matchNestedBlockComment (str, override = false) {
@@ -122,5 +134,13 @@ function matchNestedBlockComment (str, override = false) {
     const matchRecursive = matchNestedBlockComment(str.slice(matchOpen.index + 2))
     const len = matchOpen.index + matchRecursive.length + 4
     return str.slice(0, len) + matchNestedBlockComment(str.slice(len), true)
+  }
+}
+
+function findUnexpectedEOF (regex, delimiter, name) {
+  const mustNotMatch = new RegExp(regex + delimiter, 's')
+  const mustMatch = new RegExp(regex + '\\0', 's')
+  return (str) => {
+    if (mustMatch.test(str) && !mustNotMatch.test(str)) return new Error(`Unexpected EOF in ${name}`)
   }
 }

@@ -18,7 +18,7 @@ async function compile (inFileList, outFile, env) {
 
 async function compileFile (inFile) {
   const fileContents = await fs.promises.readFile(inFile, { encoding: 'utf-8' })
-  return createJS(await parseTokens(await lexString(fileContents)), inFile)
+  return createJS(await parseTokens(await lexString(fileContents, path.parse(inFile).base)), inFile)
 }
 
 async function createJS (ast, inFile) {
@@ -27,5 +27,5 @@ async function createJS (ast, inFile) {
   return js.function.replace(/%([0-9])/g, (_, n) => a[n] || '')
 }
 
-async function lexString (string) { return lexer.lex(string) }
+async function lexString (string, f) { return lexer.lex(string, f) }
 async function parseTokens (tokenList) { return parser.parse(tokenList) }
