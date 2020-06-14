@@ -14,7 +14,7 @@ function printErrorMessage (message = [], trace = [], hint) {
   process.stdout.write(chalk`{red
   ERROR:
     ${message.join('\n    ')}}\n`)
-  trace.forEach(o => process.stdout.write(chalk.red(`      at ${o.name}:<${o.file}>:${o.row}:${o.col}\n`)))
+  trace.forEach(o => process.stdout.write(chalk.red(`      at <${o.file}>:${o.name}:${o.row}:${o.col}\n`)))
   if (hint) {
     const loc = [hint.str.slice(Math.max(hint.pos - 10, 0), hint.pos), hint.str.slice(hint.pos, hint.pos + 10)]
     var n

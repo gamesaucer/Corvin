@@ -18,7 +18,11 @@ async function compile (inFileList, outFile, env) {
 
 async function compileFile (inFile) {
   const fileContents = await fs.promises.readFile(inFile, { encoding: 'utf-8' })
-  return createJS(await parseTokens(await lexString(fileContents, path.parse(inFile).base)), inFile)
+  return createJS(
+    await parseTokens(
+      await lexString(fileContents, path.parse(inFile).base)
+    ), inFile, fileContents
+  )
 }
 
 async function createJS (ast, inFile) {

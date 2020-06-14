@@ -15,6 +15,7 @@ function lex (str, f) {
     str = str.slice(token.length)
     if (token.type !== null) {
       const s = strCopy.slice(0, pos)
+      token.pos = pos
       token.row = (s.match(/\n/g) || []).length + 1
       token.col = pos - (l => l >= 0 ? l + 1 : 0)(s.lastIndexOf('\n'))
       tokens.push(token)
@@ -32,7 +33,7 @@ function getToken (str) {
   for (const t of types) {
     const match = t.r instanceof RegExp ? str.match(t.r) : arrayify(t.r(str))
     if (match) {
-      return new Token(t.n !== undefined ? t.n : match[0], 0, 0, match[1] || match[0], match[1] ? match[0].length : null)
+      return new Token(t.n !== undefined ? t.n : match[0], 0, 0, 0, match[1] || match[0], match[1] ? match[0].length : null)
     }
   }
   return false
@@ -49,6 +50,12 @@ const types = [
 
   { n: 'LIT_STR_NOESC', r: /^"""(.*?)"""/ },
   { n: 'LIT_STR', r: /^"(.*?(?<!\\)(?:\\\\)*)"/ },
+  { n: 'LIT_CHAR', r: /^'(.*?(?<!\\)(?:\\\\)*)'/ },
+  /* { n: 'LIT_CHAR', r: /^\\[\0-\377]/ },
+  { n: 'LIT_CHAR', r: /^\\\\(25[0-5]|[0-2][0-4][0-9]|[0-9]){1,2}/ },
+  { n: 'LIT_CHAR', r: /^\\\\0x[0-9a-fA-F]{1,2}/ },
+  { n: 'LIT_CHAR', r: /^\\\\0b[01]{1,8}/ },
+  { n: 'LIT_CHAR', r: /^\\\\0o[0-3]?[0-7][0-7]?/ }, */
 
   // TODO: add (?![^]), adding all reserved characters to the character list.
   // This means that a space will be required between numbers and words.
@@ -113,15 +120,17 @@ const types = [
   { n: 'OP_MAYBE_ACCESS', r: /^\?./ },
   { n: 'OP_ACCESS', r: /^\./ },
   { n: 'OP_MAYBE', r: /^\?/ },
-  { n: 'OP_OF', r: /^:/ },
+  { n: 'OP_EACH', r: /^:/ },
 
   { n: 'IDENTIFIER', r: /^[a-zA-Z_$][\w$]*/ },
   { n: 'EOF', r: /^\0/ },
 
   // Misc reserved characters, temporary { r: /^[=?:()[\]{}<>@#]/ },
 
+  { n: 'LIT_CHAR', r: findUnexpectedEOF('^\'.*?(?<!\\\\)(?:\\\\\\\\)*', '\'', 'LIT_STR') },
   { n: 'LIT_STR', r: findUnexpectedEOF('^".*?(?<!\\\\)(?:\\\\\\\\)*', '"', 'LIT_STR') },
-  { n: 'LIT_STR_NOESC', r: findUnexpectedEOF('^""".*?', '"""', 'LIT_STR_NOESC') }
+  { n: 'LIT_STR_NOESC', r: findUnexpectedEOF('^""".*?', '"""', 'LIT_STR_NOESC') },
+  { n: 'UNKNOWN', r: () => new Error('Unknown token') }
 ]
 
 function matchNestedBlockComment (str, override = false) {
