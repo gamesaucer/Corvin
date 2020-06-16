@@ -4,6 +4,10 @@ const ASTNode = require('./util/ASTNode')
 const ASTLeaf = require('./util/ASTLeaf')
 const out = require('./Console')
 
+class Expr {}
+class Term {}
+class Factor {}
+
 var file
 var str
 
@@ -118,8 +122,8 @@ function buildExpression (newToken, expression, stack = []) {
   }
 }
 
-var prec = 0
-const operators = {
+// var prec = 0
+/* const operators = {
   // a-- a++ a?.b a.b
   OP_DEC_POST: { assoc: -1, prec },
   OP_INC_POST: { assoc: -1, prec },
@@ -201,3 +205,12 @@ const operators = {
   // TODO below
   // OP_EACH: { assoc: -1, prec }
 }
+
+// expr, term, factor
+
+function getExpr (tokenList) {}
+
+function getTerm (tokenList) {}
+
+function getFactor (tokenList) {}
+*/
