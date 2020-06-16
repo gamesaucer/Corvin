@@ -3,6 +3,8 @@ module.exports = { parse }
 const ASTNode = require('./util/ASTNode')
 const ASTLeaf = require('./util/ASTLeaf')
 const out = require('./Console')
+const tokenTypes = require('./util/TokenTypes')
+const tokenPrecedences = require('./util/TokenPrecedences')
 
 class Expr {}
 class Term {}
@@ -41,7 +43,141 @@ function getNextNode (tokenList, stack = []) {
   }
 }
 
-function buildExpression (newToken, expression, stack = []) {
+function getExpr (tokenList) {
+  const expression = []
+  for (var i = 0; i < tokenList.length; i++) {
+    if (isNextTokenValid(expression, tokenList[i])) {
+      expression.push(tokenList[i])
+    } else {
+      while (!isCurrentExpressionValid(expression)) {
+        if (expression.pop() === undefined) {
+          // TODO Error out; unexpected token encountered.
+          process.exit(1)
+        }
+      }
+    }
+  }
+  resolveTerms(expression)
+  return expression
+}
+
+function getTerm (tokenList) {}
+
+function getFactor (tokenList) {}
+
+function resolveTerms (expression) {
+  const operators = expression
+    .map((t, i) => ({ t, i }))
+    .filter(o => o.t.type === tokenTypes.OP || o.t.type === tokenTypes.TEMP)
+
+    // Resolve temp-typed tokens.
+    .map(o => {
+      if (o.t.type !== tokenTypes.TEMP) {
+        return o
+      } else {
+        const bestToken = o.t.tokenOptions
+          .sort((a, b) =>
+            (tokenPrecedences.findIndex(v => v === a.precedence) + 1 || 100) -
+            (tokenPrecedences.findIndex(v => v === b.precedence) + 1 || 100))
+          .find(t => t.argPlaces.every(rI =>
+            !expression[o.i + rI].argPlaces ||
+            !expression[o.i + rI].argPlaces.includes(-rI)
+          ))
+        bestToken.occurrence = o.t.occurrence
+        return bestToken
+      }
+    })
+
+    // Put operators that take precedence first.
+    .sort((a, b) =>
+      ((tokenPrecedences.findIndex(v => v === a.t.precedence)) -
+      (tokenPrecedences.findIndex(v => v === b.t.precedence)) ||
+      b.i * b.t.associativity - a.i * a.t.associativity))
+
+  var shortening = 0
+  var litsAndIdents = expression
+    .map((t, i) => ({ t, i }))
+    .filter(o => o.t.type === tokenTypes.IDENT || o.t.type === tokenTypes.LIT)
+    .map(v => v.i)
+
+  for (const op of operators) {
+    const range = op.t.argPlaces
+      .map(v => litsAndIdents
+        .filter(i => (op - i) * v < 0)
+        .sort((a, b) => v * (a - b))[0]
+      )
+    // .reduce((acc, cur) => acc < cur * v ? acc : cur * v), Infinity)
+  }
+  // TODO continue
+}
+
+/* function tryResolveContext (expression, newToken) {
+  if (newToken instanceof tokenTypes.TEMP) {
+    const a = newToken.tokenOptions.filter(t => isNextTokenValid(expression, t))
+    if (a.length === 1) return a[0]
+  }
+  return newToken
+} */
+
+function isNextTokenValid (expression, newToken) {
+  const lastToken = expression[expression.length - 1]
+
+  // Expression ends at a separator
+  // TODO: create subexpressions. This incorrectly fails on something like 2+(5)
+  if (newToken.type === tokenTypes.SEP) return false
+
+  // Expression is invalid if the tokens expect each other as operands.
+  if ((
+    (lastToken.type === tokenTypes.OP &&
+    lastToken.argPlaces.includes(1)) ||
+    lastToken === undefined
+  ) && (
+    newToken instanceof tokenTypes.OP &&
+    newToken.argPlaces.includes(-1)
+  )) return false
+
+  // Two literals right at the start of an expression are invalid
+  if (expression.length === 1 &&
+    lastToken.type === tokenTypes.LIT &&
+    newToken.type === tokenTypes.LIT
+  ) return false
+
+  // If this token requires context, make sure at least some of its options are valid.
+  if (newToken instanceof tokenTypes.TEMP) {
+    return newToken.tokenOptions.some(t => isNextTokenValid(expression, t))
+  }
+
+  return true
+}
+
+function isCurrentExpressionValid (expression) {
+  const lastToken = expression[expression.length - 1]
+
+  // Dangling operator is invalid.
+  if (lastToken.type === tokenTypes.OP &&
+    lastToken.argPlaces.includes(1)) return false
+
+  // Check validity of context-sensitive tokens
+  const permutations = expression
+    .map((t, i) => ({ t, i }))
+    .filter(o => o.t.type === tokenTypes.TEMP)
+    .reduce((value, tokenObj) => tokenObj.t.tokenOptions
+      .map(t => value
+        .map(combo => [...t, ...combo])
+      )
+    , [[]])
+
+  // If there are context-sensitive tokens, check for each permutation.
+  if (permutations.length > 1) {
+    return permutations
+      .some(p => isCurrentExpressionValid(expression
+        .map((t, i) => t.type === tokenTypes.TEMP ? p.find(tO => tO.i === i) : t)
+      ))
+  }
+  return true
+}
+
+/* function buildExpression (newToken, expression, stack = []) {
   switch (newToken.type) {
     // Literals
     case 'LIT_STR_NOESC':
@@ -120,97 +256,4 @@ function buildExpression (newToken, expression, stack = []) {
       process.exit(1)
       break
   }
-}
-
-// var prec = 0
-/* const operators = {
-  // a-- a++ a?.b a.b
-  OP_DEC_POST: { assoc: -1, prec },
-  OP_INC_POST: { assoc: -1, prec },
-  OP_MAYBE_ACCESS: { assoc: -1, prec },
-  OP_ACCESS: { assoc: -1, prec: prec++ },
-
-  // --a ++a -a +a !a ~a
-  OP_DEC_PRE: { assoc: 1, prec },
-  OP_INC_PRE: { assoc: 1, prec },
-  OP_NEG: { assoc: 1, prec },
-  OP_POS: { assoc: 1, prec },
-  OP_NOT: { assoc: 1, prec },
-  OP_BIT_NOT: { assoc: 1, prec: prec++ },
-
-  // a?
-  OP_MAYBE: { assoc: -1, prec: prec++ },
-
-  // a**b
-  OP_POW: { assoc: -1, prec: prec++ },
-
-  // a/b a*b a%b
-  OP_DIV: { assoc: -1, prec },
-  OP_MUL: { assoc: -1, prec },
-  OP_MOD: { assoc: -1, prec: prec++ },
-
-  // a-b a+b
-  OP_SUB: { assoc: -1, prec },
-  OP_ADD: { assoc: -1, prec: prec++ },
-
-  // a<<b a>>b
-  OP_BIT_LEFT: { assoc: -1, prec },
-  OP_BIT_RIGHT: { assoc: -1, prec: prec++ },
-
-  // a..b
-  OP_RANGE: { assoc: -1, prec: prec++ },
-
-  // a>=b a<=b a>b a<b
-  OP_GT_EQ: { assoc: -1, prec },
-  OP_LT_EQ: { assoc: -1, prec },
-  OP_LT: { assoc: -1, prec },
-  OP_GT: { assoc: -1, prec: prec++ },
-
-  // a!=b a==b
-  OP_NEQ: { assoc: -1, prec },
-  OP_EQ: { assoc: -1, prec: prec++ },
-
-  // a&b
-  OP_BIT_AND: { assoc: -1, prec: prec++ },
-
-  // a^b
-  OP_BIT_XOR: { assoc: -1, prec: prec++ },
-
-  // a|b
-  OP_BIT_OR: { assoc: -1, prec: prec++ },
-
-  // a&&b
-  OP_AND: { assoc: -1, prec: prec++ },
-
-  // a^^b
-  OP_XOR: { assoc: -1, prec: prec++ },
-
-  // a||b
-  OP_OR: { assoc: -1, prec: prec++ },
-
-  // a=b a+=b a-=b a*=b a/=b a%=b a**=b a^=b a|=b a&=b a<<=b a>>=b
-  OP_ASSIGN: { assoc: 1, prec },
-  OP_ADD_ASSIGN: { assoc: 1, prec },
-  OP_SUB_ASSIGN: { assoc: 1, prec },
-  OP_MUL_ASSIGN: { assoc: 1, prec },
-  OP_DIV_ASSIGN: { assoc: 1, prec },
-  OP_MOD_ASSIGN: { assoc: 1, prec },
-  OP_POW_ASSIGN: { assoc: 1, prec },
-  OP_XOR_ASSIGN: { assoc: 1, prec },
-  OP_OR_ASSIGN: { assoc: 1, prec },
-  OP_AND_ASSIGN: { assoc: 1, prec },
-  OP_LEFT_ASSIGN: { assoc: 1, prec },
-  OP_RIGHT_ASSIGN: { assoc: 1, prec: prec++ }
-
-  // TODO below
-  // OP_EACH: { assoc: -1, prec }
-}
-
-// expr, term, factor
-
-function getExpr (tokenList) {}
-
-function getTerm (tokenList) {}
-
-function getFactor (tokenList) {}
-*/
+} */

@@ -1,119 +1,7 @@
-class TokenOccurence {
-  constructor (content, totalLength) {
-    this.location = null
-    this.content = content
-    this.totalLength = totalLength || content.length
-  }
 
-  setLocation (pos, str) {
-    const s = str.slice(0, pos)
-    this.location = {
-      neighbourhood: [str.slice(Math.max(pos - 10, 0), pos), str.slice(pos, pos + 10)],
-      line: (s.match(/\n/g) || []).length + 1,
-      column: pos - (l => l >= 0 ? l + 1 : 0)(s.lastIndexOf('\n'))
-    }
-    var n
-    if ((n = this.location.neighbourhood[0].lastIndexOf('\n')) !== -1) {
-      this.location.neighbourhood[0].splice(0, n + 1)
-    }
-    if ((n = this.location.neighbourhood[1].indexOf('\n')) !== -1) {
-      this.location.neighbourhood[1].splice(n)
-    }
-  }
-}
-
-class Token {
-  constructor (name, type, matcher) {
-    Object.defineProperty(this, 'name', { get () { return name } })
-    Object.defineProperty(this, 'type', { get () { return type } })
-    Object.defineProperty(this, 'matcher', { get () { return matcher } })
-  }
-
-  matchOf (str) {
-    switch (this.matcher.constructor) {
-      case RegExp: return str.match(this.matcher)
-      case Function : return this.matcher(str)
-      default: return this.matcher
-    }
-  }
-
-  setOccurrence (...args) {
-    const copy = Object.assign({}, this)
-    copy.occurrence = new TokenOccurence(...args)
-    return copy
-  }
-}
-
-/*
-const match = t.matchOf(str)
-    if (match) {
-      return new Token(
-        t.n instanceof Array ? match[0] : t.n,
-        0, 0, 0, // Fill in later
-        match[1] || match[0] || match,
-        match[1] ? match[0].length : null)
-    }
-*/
-
-/*
-class Token {
-  constructor (type, pos, row, col, symbol = type, length) {
-    this.type = type
-    this.row = row
-    this.col = col
-    this.pos = pos
-    this.symbol = symbol
-    this.length = length || symbol.length
-  }
-}
-*/
-
-class TempToken extends Token {
-  constructor (name, matcher, tokenOptions) {
-    super(name, type.TEMP, matcher)
-    this.tokenOptions = tokenOptions
-  }
-}
-
-class OpToken extends Token {
-  constructor (name, matcher, precedence, associativity, argPlaces) {
-    super(name, type.OP, matcher)
-    this.precedence = precedence
-    this.associativity = associativity
-    this.argPlaces = argPlaces
-  }
-}
-
-const type = {
-  INVALID: Symbol('Invalid token, meant to be removed'),
-  LIT: Symbol('Literal value, able to be evaluated at compile time'),
-  IDENT: Symbol('Identifier, i.e. non-reserved names'),
-  SEP: Symbol('Seperator, demarcates expressions'),
-  OP: Symbol('Operator, does an operation on values or identifiers.'),
-  TEMP: Symbol('Ambiguous without context, meant for the parser to determine the context of.')
-}
-
-// These are in order of precedence; don't change the order.
-const prec = {
-  // Decided that maybe/option should probably just be a no-op in case of null
-  POST_N_ACCESS: Symbol('a-- a++ a?.b a.b a? a@?'),
-  PRE_N_NOT: Symbol('--a ++a -a +a !a ~a @a'),
-  MATH_POW: Symbol('a**b'),
-  MATH_MULT: Symbol('a/b a*b a%b'),
-  MATH_PLUS: Symbol('a-b a+b'),
-  BITSHIFT: Symbol('a<<b a>>b'),
-  RANGE: Symbol('a..b'),
-  LT_N_GT: Symbol('a>=b a<=b a>b a<b'),
-  EQ_N_NEQ: Symbol('a!=b a==b'),
-  B_AND: Symbol('a&b'),
-  B_XOR: Symbol('a^b'),
-  B_OR: Symbol('a|b'),
-  L_AND: Symbol('a&&b'),
-  L_XOR: Symbol('a^^b'),
-  L_OR: Symbol('a||b'),
-  ASSIGN: Symbol('a=b a+=b a-=b a*=b a/=b a%=b a**=b a^=b a|=b a&=b a<<=b a>>=b'),
-  EACH: Symbol('a:b')
-}
+const type = require('./TokenTypes')
+const prec = require('./TokenPrecedences')
+const { Token, OpToken, TempToken } = require('./Token')
 
 const assoc = {
   LEFT: -1,
@@ -121,9 +9,9 @@ const assoc = {
 }
 
 const args = {
-  LEFT: -1,
-  BOTH: 0,
-  RIGHT: 1
+  LEFT: [-1],
+  BOTH: [-1, 1],
+  RIGHT: [1]
 }
 
 const tokenList = [
@@ -234,7 +122,7 @@ const tokenList = [
   new Token('LIST_C', type.SEP, /^]/),
   new Token('ARG_DEMARK', type.SEP, /^,/),
   new Token('EXP_DEMARK', type.SEP, /^;+/),
-  new Token('SEP_EOF', type.SEP, /^\0/),
+  new Token('EOF', type.SEP, /^\0/),
 
   new Token('IDENTIFIER', type.IDENT, /^[a-zA-Z_$][\w$]*/),
 
@@ -268,4 +156,4 @@ function findUnexpectedEOF (regex, delimiter, name) {
   }
 }
 
-module.exports = tokenList
+module.exports = { tokenList }

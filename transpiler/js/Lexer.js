@@ -1,8 +1,7 @@
 module.exports = { lex }
 
-// const Token = require('./util/Token')
 const out = require('./Console')
-const tokenList = require('./util/TokenList')
+const { tokenList } = require('./util/TokenList')
 
 function lex (str, f) {
   str = str.replace(/\r\n|\r|\n/, '\n') + '\0'
