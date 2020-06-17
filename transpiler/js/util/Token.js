@@ -26,20 +26,38 @@ class Token {
 class TempToken extends Token {
   constructor (name, matcher, tokenOptions) {
     super(name, type.TEMP, matcher)
-    // this.tokenOptions = tokenOptions
-    Object.defineProperty(this, 'tokenOptions', {
-      get () { return tokenOptions },
-      set (a) { return new TempToken(this.name, this.matcher, a) }
-    })
+    Object.defineProperty(this, 'tokenOptions', { get () { return tokenOptions } })
+  }
+
+  matchOf (str) {
+    const r = super.matchOf(str)
+    this.setOccurrence = (...args) => {
+      const copy = new TempToken(this.name, this.matcher, this.tokenOptions.filter(t => t.matchOf(str)))
+      copy.occurrence = new TokenOccurrence(...args)
+      return copy
+    }
+    return r
+  }
+
+  setOccurrence (...args) {
+    const copy = new TempToken(this.name, this.matcher, this.tokenOptions)
+    copy.occurrence = new TokenOccurrence(...args)
+    return copy
   }
 }
 
 class OpToken extends Token {
-  constructor (name, matcher, precedence, associativity, argPlaces) {
+  constructor (name, matcher, precedence, argPlaces) {
     super(name, type.OP, matcher)
     this.precedence = precedence
-    this.associativity = associativity
+    // this.associativity = precedence[0] // associativity
     this.argPlaces = argPlaces
+  }
+
+  setOccurrence (...args) {
+    const copy = new OpToken(this.name, this.matcher, this.precedence, this.argPlaces)
+    copy.occurrence = new TokenOccurrence(...args)
+    return copy
   }
 }
 

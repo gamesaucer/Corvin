@@ -13,7 +13,7 @@ function lex (str, f) {
   var token
   while ((token = getToken(str))) {
     str = str.slice(token.length)
-    if (token.type !== null) {
+    if (token.name !== null) {
       token.occurrence.setLocation(pos, strCopy)
       tokens.push(token)
       if (token.symbol instanceof Error) {
@@ -23,7 +23,7 @@ function lex (str, f) {
             row: token.occurrence.location.line,
             col: token.occurrence.location.col,
             file: f,
-            name: token.type
+            name: token.name
           }],
           token.occurrence.location.neighbourhood
         )
