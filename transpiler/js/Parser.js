@@ -55,7 +55,7 @@ function collapseOperators (tokens) {
  */
 function collapseSingleOperator (tokens, i, precedence) {
   const token = tokens[i]
-  if (token.type !== tokenTypes.OP || token.precedence === precedence) return
+  if (token.type !== tokenTypes.OP || token.precedence !== precedence) return
 
   const start = Math.min(0, ...token.argPlaces)
   const end = Math.max(0, ...token.argPlaces)
