@@ -14,10 +14,10 @@ class TokenOccurrence {
     }
     var n
     if ((n = this.location.neighbourhood[0].lastIndexOf('\n')) !== -1) {
-      this.location.neighbourhood[0].splice(0, n + 1)
+      this.location.neighbourhood[0] = this.location.neighbourhood[0].slice(n + 1)
     }
     if ((n = this.location.neighbourhood[1].indexOf('\n')) !== -1) {
-      this.location.neighbourhood[1].splice(n)
+      this.location.neighbourhood[1] = this.location.neighbourhood[1].slice(0, n)
     }
   }
 }

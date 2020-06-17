@@ -157,7 +157,7 @@ const tokenList = [
   new Token('STR_NOESC', type.LIT, findUnexpectedEOF('^""".*?', '"""', 'STR_NOESC')),
   new Token('STR', type.LIT, findUnexpectedEOF('^".*?(?<!\\\\)(?:\\\\\\\\)*', '"', 'STR')),
   new Token('CHAR', type.LIT, findUnexpectedEOF('^\'.*?(?<!\\\\)(?:\\\\\\\\)*', '\'', 'CHAR')),
-  new Token('UNKNOWN', type.INVALID, new Error('Unknown token'))
+  new Token('UNKNOWN', type.INVALID, s => s.length ? new Error('Unknown token') : false)
 ]
 
 function matchNestedBlockComment (str, override = false) {
@@ -169,7 +169,7 @@ function matchNestedBlockComment (str, override = false) {
     if (!matchOpen || matchClose.index < matchOpen.index) return str.slice(0, matchClose.index + 4)
     const matchRecursive = matchNestedBlockComment(str.slice(matchOpen.index + 2))
     const len = matchOpen.index + matchRecursive.length + 4
-    return str.slice(0, len) + matchNestedBlockComment(str.slice(len), true)
+    return [str.slice(0, len) + matchNestedBlockComment(str.slice(len), true)]
   }
 }
 

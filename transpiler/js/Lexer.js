@@ -12,13 +12,13 @@ function lex (str, f) {
   var pos = 0
   var token
   while ((token = getToken(str))) {
-    str = str.slice(token.length)
+    str = str.slice(token.occurrence.totalLength)
     if (token.name !== null) {
       token.occurrence.setLocation(pos, strCopy)
       tokens.push(token)
-      if (token.symbol instanceof Error) {
+      if (token.occurrence.content instanceof Error) {
         out.print.error(
-          [token.symbol.message],
+          [token.occurrence.content.message],
           [{
             row: token.occurrence.location.line,
             col: token.occurrence.location.col,
@@ -30,7 +30,7 @@ function lex (str, f) {
         process.exit(1)
       }
     }
-    pos += token.length
+    pos += token.occurrence.totalLength
   }
   return tokens
 }
