@@ -11,18 +11,19 @@ async function compile (inFileList, outFile, env) {
   js = { ...require('./env.json')[env] }
   const result = (await Promise.all(inFileList.map(path => compileFile(path))))
 
-  fs.writeFileSync(outFile, js.start)
+  // fs.writeFileSync(outFile, js.start)
+  fs.writeFileSync(outFile, '')
   result.forEach(output => fs.appendFileSync(outFile, output))
-  fs.appendFileSync(outFile, js.end)
+  // fs.appendFileSync(outFile, js.end)
 }
 
 async function compileFile (inFile) {
   const fileContents = await fs.promises.readFile(inFile, { encoding: 'utf-8' })
-  return createJS(
-    await parseTokens(
-      await lexString(fileContents, path.parse(inFile).base)
-    ), inFile, fileContents
-  )
+  // return createJS(
+  return (await parseTokens(
+    await lexString(fileContents, path.parse(inFile).base)
+  )).toString()
+  //  , inFile, fileContents)
 }
 
 async function createJS (ast, inFile) {

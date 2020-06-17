@@ -16,14 +16,10 @@ function printErrorMessage (message = [], trace = [], hint) {
     ${message.join('\n    ')}}\n`)
   trace.forEach(o => process.stdout.write(chalk.red(`      at ${o.name} in <${o.file}>:${o.row}:${o.col}\n`)))
   if (hint) {
-    const loc = [hint.str.slice(Math.max(hint.pos - 10, 0), hint.pos), hint.str.slice(hint.pos, hint.pos + 10)]
-    var n
-    if ((n = loc[0].lastIndexOf('\n')) !== -1) loc[0] = loc[0].slice(n + 1)
-    if ((n = loc[1].indexOf('\n')) !== -1) loc[1] = loc[1].slice(0, n)
     process.stdout.write(chalk`{red
   Near:
-    ${loc.join('')}  
-    ${'^'.padEnd(loc[1].length, '~').padStart(loc.join('').length, '~')}}`)
+    ${hint.join('')}  
+    ${'^'.padEnd(hint[1].length, '~').padStart(hint.join('').length, '~')}}`)
   }
 }
 

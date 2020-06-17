@@ -4,7 +4,7 @@ const out = require('./Console')
 const { tokenList } = require('./util/TokenList')
 
 function lex (str, f) {
-  str = str.replace(/\r\n|\r|\n/, '\n') + '\0'
+  str = str.replace(/\r\n|\r|\n/, '\n') + '\n\0'
 
   const tokens = []
   const strCopy = str

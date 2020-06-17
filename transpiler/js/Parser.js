@@ -12,7 +12,18 @@ class ParseNode {
   }
 
   toString () {
-    return `(${this.type.occurrence.content} ${this.content.map(c => c instanceof ParseNode ? c.toString() : c.occurrence.content)})`
+    return this.toArray().join('\n')
+  }
+
+  toArray () {
+    const arr = this.content
+      .flatMap(c => c instanceof ParseNode
+        ? c.toArray()
+        : `${c.name}:${c.occurrence.content}`)
+      .map(s => '  ' + s)
+
+    arr.unshift(this.type.name + ':')
+    return arr
   }
 }
 
@@ -26,7 +37,7 @@ function parse (tokens, fileName) {
   resolveTempTokens(tokens)
   collapseOperators(tokens)
 
-  return tokens
+  return new ParseNode(expDelimiter, tokens)
 }
 
 /**
@@ -39,7 +50,6 @@ function collapseOperators (tokens) {
     .forEach(node => collapseOperators(node.content))
 
   Object.values(tokenPrecedences).forEach(p => {
-    // const reduceAssoc = p[0] === -1 ? reduce, reduceRight
     if (p[0] === -1) {
       for (let i = 0; i < tokens.length; i++) collapseSingleOperator(tokens, i, p)
     } else {
@@ -79,8 +89,8 @@ function resolveTempTokens (tokens) {
     .filter(t => t.type === tokenTypes.TEMP)
     .flatMap((t, i) => t.tokenOptions.map(opt => ({ t: opt, i })))
     .sort((a, b) =>
-      (tokenPrecedences.findIndex(v => v === a.t.precedence) + 1 || 100) -
-      (tokenPrecedences.findIndex(v => v === b.t.precedence) + 1 || 100))
+      (Object.values(tokenPrecedences).findIndex(v => v === a.t.precedence) + 1 || 100) -
+      (Object.values(tokenPrecedences).findIndex(v => v === b.t.precedence) + 1 || 100))
 
   for (var j = 0; j < tempTokens.length; j++) {
     if (tokens[tempTokens[j].i].type === tokenTypes.TEMP) {
@@ -123,7 +133,7 @@ function collapseDelimiters (tokens, type, disallowed = [], parentNode) {
   // If delimiters aren't allowed here but are present, error
   {
     const i = tokens.findIndex(t => t.name === type.name)
-    if (disallowed.includes(parentNode) && i !== -1) throwDisallowedDelimiterError(parentNode, tokens[i])
+    if (disallowed.includes(parentNode) && i !== -1) throwDisallowedDelimiterError(parentNode || { name: 'MAIN' }, tokens[i])
   }
 
   // Take care of children first, since the tree is simplest at this stage.
@@ -138,7 +148,7 @@ function collapseDelimiters (tokens, type, disallowed = [], parentNode) {
 
   if (delimiters.length > 1) {
     delimiters
-      .map((d, i, a) => new ParseNode(type, tokens.slice(d + 1, a[i + 1] || tokens.length)))
+      .map((d, i, a) => new ParseNode(type.setOccurrence('', 0), tokens.slice(d + 1, a[i + 1] || tokens.length)))
       .forEach((a, i) => tokens.splice(i, a.content.length + 1, a))
   }
 }

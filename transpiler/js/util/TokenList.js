@@ -35,11 +35,11 @@ const tokenList = [
 
   // TODO: add (?![^]), adding all reserved characters to the character list.
   // This means that a space will be required between numbers and words.
-  new Token('FRAC', type.LIT, /^([0-9]+\.[0-9]*|[0-9]*\.[0-9]+)/),
-  new Token('INT', type.LIT, /^[0-9]+/),
+  new Token('FRAC', type.LIT, /^([0-9]+\.[0-9]*|[0-9]*\.[0-9]+)(?!\.)/),
   new Token('INT', type.LIT, /^0[xX][0-9a-fA-F]+/),
   new Token('INT', type.LIT, /^0[bB][01]+/),
   new Token('INT', type.LIT, /^0[oO][0-8]+/),
+  new Token('INT', type.LIT, /^[0-9]+/),
 
   new OpToken('ASSIGN', /^=/, prec.ASSIGN, args.BOTH),
   new OpToken('ADD_ASSIGN', /^\+=/, prec.ASSIGN, args.BOTH),

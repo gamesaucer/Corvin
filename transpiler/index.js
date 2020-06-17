@@ -63,5 +63,7 @@ function jsCorvin () {
     process.exit(1)
   }
 
-  compiler.compile(argv.f, argv.o, argv.e)
+  compiler.compile(argv.f, argv.o, argv.e).then(() => {
+    out.print.ok(['Parse tree generated successfully!', `See '${argv.o}' for output.`])
+  })
 }
