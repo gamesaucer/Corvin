@@ -1,47 +1,48 @@
 /**
- * Corvin grammar (WIP)
- *
- * Used as a prototyping tool for designing Corvin.
- * No features are currently final.
- * More info here later.
- *
- * Currently supported features:
- *
- *   - Line comments and nested block comments.
- *   - Automatic semicolon insertion at the end of a block and EOF.
- *
- *   - Identifiers are recognised.
- *   - String literals using single or double quotes.
- *   - String literals without escapes using triple double quotes.
- *   - Numeric literals can be specified in base 2, 8, 10 and 16.
- *   - Decimal numeric literals can make use of a fractional component and/or exponents.
- *
- *   - Rudimentary error / warning logging that doesn't halt the parser.
- *
- *   - Code blocks are recognised.
- *   - Many basic operators are recognised and obey precedence and associativity rules:
- *
- *        Unary: + - / ~ ! ++ -- 
- *        Binary: ** * / % + - >> << >= > <= < == != & ^ | && ^^ ||
- *        Assignment: **= *= /= %= += -= >>= <<= ^= |= &= =
- *
- * Corvin © 2019-2020 @gamesaucer 
- */
+* Corvin grammar (WIP)
+*
+* Used as a prototyping tool for designing Corvin.
+* No features are currently final.
+* More info here later.
+*
+* Currently supported features:
+*
+*   - Line comments and nested block comments.
+*   - Automatic semicolon insertion at the end of a block and EOF.
+*
+*   - Identifiers are supported.
+*   - String literals using single or double quotes.
+*   - String literals without escapes using triple double quotes.
+*   - Numeric literals can be specified in base 2, 8, 10 and 16.
+*   - Decimal numeric literals can make use of a fractional component and/or exponents.
+*
+*   - Rudimentary error / warning logging that doesn't halt the parser.
+*
+*   - Code blocks are supported.
+*   - If and if/else expressions are supported.
+*   - Many basic operators are supported and obey precedence and associativity rules:
+*
+*        Unary: + - / ~ ! ++ -- 
+*        Binary: ** * / % + - >> << >= > <= < == != & ^ | && ^^ ||
+*        Assignment: **= *= /= %= += -= >>= <<= ^= |= &= =
+*
+* Corvin © 2019-2020 @gamesaucer 
+*/
 
 
 
 /************************
- *                      *
- *    JS Initialiser    *
- *                      *
- ************************/
+*                      *
+*    JS Initialiser    *
+*                      *
+************************/
 
 
 
 {
   /**
-   * Constants
-   */
+  * Constants
+  */
 
   const logs = {}
   const LEVEL = { ERR: 0, WARN: 1, NOTE: 2 }
@@ -62,19 +63,23 @@
 
 
   /**
-   * Parser output
-   */
+  * Parser output
+  */
 
   function processParserOutput(program) {
     printLogs()
-    return { program, logs: logs }  
+    if (logs[LEVEL.ERR]) {
+      return { logs }
+    } else {
+      return { program, logs }
+    }
   }
 
 
 
   /**
-   * Utility functions
-   */
+  * Utility functions
+  */
 
   function extractList (list, index) {
     return list.map(o => o[index])
@@ -106,8 +111,8 @@
 
 
   /**
-   * Logging
-   */
+  * Logging
+  */
 
   function log (type, ...message) {
     if (!logs[type]) logs[type] = []
@@ -125,8 +130,8 @@
 
 
   /**
-   * Expression builders
-   */
+  * Expression builders
+  */
 
   function buildUnaryExpression (name, head, tail) {
     return tail.reduce((result, element) => ({
@@ -161,8 +166,8 @@
 
 
   /**
-   * String validation
-   */
+  * String validation
+  */
 
   function isStringClosed(openQuote, closeQuote) {
     if (closeQuote) { 
@@ -178,10 +183,10 @@
 
 
 /*********************
- *                   *
- *    PEG Grammar    *
- *                   *
- *********************/
+*                   *
+*    PEG Grammar    *
+*                   *
+*********************/
 
 
 
@@ -190,8 +195,8 @@ Start = _ program:Program _ { return processParserOutput(program) }
 
 
 /**
- * Program
- */
+* Program
+*/
 
 Program
   = body:SourceElementList? { return buildValue('Program', listQmToList(body)) }
@@ -209,8 +214,8 @@ SourceElement = _ statement:Statement _ { return statement }
 
 
 /**
- * Lexical grammar
- */
+* Lexical grammar
+*/
 
 // Whitespace & Control
 
@@ -236,19 +241,21 @@ MultiLineComment
 
 
 /**
- * Statements
- */
+* Statements
+*/
 
 Statement
-  = Block
+  = DeclarationStatement
   / ExpressionStatement
   / EmptyStatement
 
 ExpressionStatement = expr:Expression _ EOS { return expr }
 EmptyStatement = EOSToken { return buildValue('EmptyExpression', null, 'None') }
+DeclarationStatement
+  = type:Expression _ ident:Identifier tail:AssignmentExpressionTail+ _ EOS
+    { return { type:'DeclarationExpression', left:type, right:buildBinaryExpression('Assignment', ident, tail) } }
+  / type:Expression _ ident:Identifier _ EOS { return { type:'DeclarationExpression', left:type, right:ident } }
 
-Block
-  = OpenBlockToken _ body:SourceElementList? _ CloseBlockToken { return buildValue('Block', listQmToList(body)) }
 
 
 
@@ -256,7 +263,7 @@ Block
 
 EOS
   = _ EOSToken
-  / _ &(CloseBlockToken)
+  / _ &(CloseBlockToken / SequenceToken)
   / _ EOF
   / _ { log(LEVEL.ERR, MSG.MISSINGEOS) }
 
@@ -265,12 +272,24 @@ EOF = !.
 
 
 /**
- * Expressions
- */
+* Expressions
+*/
 
 PrimaryExpression
-  = Identifier
+  = BracketedExpression
+  / Identifier
   / Literal
+  / Block
+
+Block
+  = OpenBlockToken _ body:SourceElementList? _ CloseBlockToken { return buildValue('Block', listQmToList(body)) }
+
+BracketedExpression
+  = OpenTupleToken _ expr:Expression _ CloseTupleToken { return expr }
+
+
+
+// Operators
 
 /* Update expressions are non-associative */
 UpdateExpression
@@ -358,19 +377,32 @@ LogicalOrExpression
     tail:(_ $LogicalOrOperator _ LogicalXorExpression)*
     { return buildBinaryExpression('Binary', head, tail) }
 
+/* Conditional expressions are right-associative */
+ConditionalExpression
+  = LogicalOrExpression
+  / IfKeyword _ test:(Block / Expression) _
+    consequent:(Block / Expression) _ ElseKeyword _
+    alternate:(Block / Expression)
+    { return { type:'Conditional', test, consequent, alternate } }
+  / IfKeyword _ test:(Block / Expression) _
+    consequent:(Block / Expression)
+    { return { type:'Conditional', test, consequent, alternate:[] } }
+
 /* Assignment expressions are right-associative */
 AssignmentExpression
-  = head:LogicalOrExpression
-    tail:(_ $AssignmentOperator _ AssignmentExpression)*
+  = head:ConditionalExpression
+    tail:AssignmentExpressionTail*
     { return buildBinaryExpression('Assignment', head, tail) }
+AssignmentExpressionTail
+  = _ $AssignmentOperator _ AssignmentExpression
 
 Expression = AssignmentExpression
 
 
 
 /**
- * Literals
- */
+* Literals
+*/
 
 Literal = NumericLiteral / StringLiteral
 
@@ -444,8 +476,8 @@ EscapeCharacter
 
 
 /**
- * Tokens
- */
+* Tokens
+*/
 
 // Misc
 
@@ -457,6 +489,8 @@ EscapeToken = '\\'
 
 OpenBlockToken = '{'
 CloseBlockToken = '}'
+OpenTupleToken = '('
+CloseTupleToken = ')'
 
 LineCommentToken = '//'
 OpenBlockCommentToken = '/*'
@@ -474,7 +508,19 @@ DecDigitToken = [0-9]
 HexDigitToken = [0-9a-fA-F]
 DecimalPointToken = '.'
 
+SequenceToken = ','
 EOSToken = ';'
+
+
+
+// Keywords
+
+Keyword
+  = IfKeyword
+  / ElseKeyword
+
+IfKeyword = 'if'
+ElseKeyword = 'else'
 
 
 
@@ -503,7 +549,7 @@ AssignmentOperator = ( '**' / '*' / '/' / '%' / '+' / '-' / '>>' / '<<' / '^' / 
 
 /* Identifiers may not be keywords and must consist of a valid identifier name */
 Identifier 'identifier'
-  = /*!Keyword*/ ident:$IdentifierName { return buildValue('Identifier', ident)}
+  = !Keyword ident:$IdentifierName { return buildValue('Identifier', ident)}
 
 /* Identifier names must begin with a valid starting character and continue with valid part characters */
 IdentifierName
