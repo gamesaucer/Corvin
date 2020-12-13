@@ -9,11 +9,15 @@
  *
  *   - Line comments and nested block comments.
  *   - Automatic semicolon insertion at the end of a block and EOF.
+ *
+ *   - Identifiers are recognised.
  *   - String literals using single or double quotes.
  *   - String literals without escapes using triple double quotes.
  *   - Numeric literals can be specified in base 2, 8, 10 and 16.
  *   - Decimal numeric literals can make use of a fractional component and/or exponents.
- *   - Identifiers are recognised.
+ *
+ *   - Rudimentary error / warning logging that doesn't halt the parser.
+ *
  *   - Many basic operators are recognised and obey precedence and associativity rules:
  *
  *        Unary: + - / ~ ! ++ -- 
@@ -23,7 +27,54 @@
  * Corvin © 2019-2020 @gamesaucer 
  */
 
+
+
+/************************
+ *                      *
+ *    JS Initialiser    *
+ *                      *
+ ************************/
+
+
+
 {
+  /**
+   * Constants
+   */
+
+  const logs = {}
+  const LEVEL = { ERR: 0, WARN: 1, NOTE: 2 }
+  const OUTPUT = { 0:console.error, 1:console.warn, 2:console.log }
+  const MSG = {
+    INVALIDNUM: 'Invalid numeric literal found',
+    STRUNCLOSED: 'Unterminated string literal found',
+    UNEXPIDENT: 'Unexpected identifier "%0"',
+    UNEXPNUM: 'Unexpected digit "%0"',
+    MISSINGEOS: 'Missing semicolon',
+
+    // Detail
+    EXPERR: 'Malformed exponent',
+    RADIXTOKENERR: 'Radix token "%0" not allowed by itself',
+    FRACTOKENERR: 'Fraction token "%0" not allowed by itself',
+  }
+
+
+
+  /**
+   * Parser output
+   */
+
+  function processParserOutput(program) {
+    printLogs()
+    return { program, logs: logs }  
+  }
+
+
+
+  /**
+   * Utility functions
+   */
+
   function extractList (list, index) {
     return list.map(o => o[index])
   }
@@ -36,13 +87,52 @@
     return value !== null ? value : []
   }
 
+  function getLocation () {
+    return location()
+  }
+
+  function matchUnicodeCharacterCategories (char, categories) {
+    return categories
+      .split(/(?=[A-Z])/)
+      .some(category => char.match(new RegExp(`\\p{${category}}`,'u')))
+  }
+
+  function sprintf(string, ...vars) {
+    return string.replace(/%([0-9]+)/g, (_, n) => vars[n])
+  }
+
+
+
+  /**
+   * Logging
+   */
+
+  function log (type, ...message) {
+    if (!logs[type]) logs[type] = []
+    logs[type].push({message: message.join(' - '), location: getLocation()})
+  }
+
+  function printLogs () {
+    for (const level in logs) {
+      logs[level].forEach(log => {
+        OUTPUT[level](log.message, `\n\ton line ${log.location.start.line} at position ${log.location.start.column}`)
+      })
+    }
+  }
+
+
+
+  /**
+   * Expression builders
+   */
+
   function buildUnaryExpression (name, head, tail) {
     return tail.reduce((result, element) => ({
       type: name + 'Expression',
       operator: element[1],
       prefix: !head,
       argument: result || element[3],
-      location: getLocation(),
+      //location: getLocation(),
     }), head)
   }
 
@@ -52,27 +142,42 @@
       operator: element[1],
       left: result,
       right: element[3],
-      location: getLocation(),
+      //location: getLocation(),
     }), head)
   }
 
   function buildValue(type, value) {
-    return { type, value, location: getLocation() }
+    return { type, value, /*location: getLocation()*/ }
   }
 
-  function getLocation() {
-    // Temporarily disabled to keep AST clean for debugging the parser
-    // return location()
-  }
 
-  function matchUnicodeCharacterCategories(char, categories) {
-    return categories
-      .split(/(?=[A-Z])/)
-      .some(category => char.match(new RegExp(`\\p{${category}}`,'u')))
+
+  /**
+   * String validation
+   */
+
+  function isStringClosed(openQuote, closeQuote) {
+    if (closeQuote) { 
+      return openQuote === closeQuote 
+    } else { 
+      log(LEVEL.ERR, MSG.STRUNCLOSED); 
+      return true; 
+    }
   }
 }
 
-Start = _ program:Program _ { return program }
+
+
+
+/*********************
+ *                   *
+ *    PEG Grammar    *
+ *                   *
+ *********************/
+
+
+
+Start = _ program:Program _ { return processParserOutput(program) }
 
 
 
@@ -95,6 +200,7 @@ SourceElementList
 
 SourceElement
   = _ expr:Expression _ EOS _ { return expr }
+  / _ expr:EmptyExpression _ { return expr }
 
 
 
@@ -116,6 +222,7 @@ EOS
   = _ EOSToken
   / _ &[})\]]
   / _ EOF
+  / _ { log(LEVEL.ERR, MSG.MISSINGEOS) }
 
 EOF = !.
 
@@ -238,6 +345,7 @@ AssignmentExpression
     { return buildBinaryExpression('Assignment', head, tail) }
 
 Expression = AssignmentExpression
+EmptyExpression = EOSToken { return buildValue('EmptyExpression', null) }
 
 
 
@@ -252,24 +360,36 @@ Literal = NumericLiteral / StringLiteral
 // Number
 
 /* Numeric literals are expressed in base 2, 8, 10 or 16. */
-NumericLiteral 'number' = val:(BinLiteral / OctLiteral / HexLiteral / DecLiteral) { return buildValue('NumericLiteral', val) }
+NumericLiteral 'number'
+  = val:(BinLiteral / OctLiteral / HexLiteral / DecLiteral) 
+    &(t:$IdentifierName &{log(LEVEL.ERR, sprintf(MSG.UNEXPIDENT, t))})?
+    &(t:$DecDigitToken &{log(LEVEL.ERR, sprintf(MSG.UNEXPNUM, t))})?
+    { return buildValue('NumericLiteral', val) }
 
 /* A literal of any base that's not 10 is preceded by a special token. Base 10 can be an int or a real, and may have an exponent.*/
-BinLiteral = BinLiteralToken val:$BinDigitToken+ { return parseInt(val, 2) }
-OctLiteral = OctLiteralToken val:$OctDigitToken+ { return parseInt(val, 8) }
+BinLiteral = t:BinLiteralToken val:$BinDigitToken* 
+  &{ if (val.length === 0) log(LEVEL.ERR, MSG.INVALIDNUM, sprintf(MSG.RADIXTOKENERR, t) ); return true }
+  { return parseInt(val, 2) }
+OctLiteral = t:OctLiteralToken val:$OctDigitToken* 
+  &{ if (val.length === 0) log(LEVEL.ERR, MSG.INVALIDNUM, sprintf(MSG.RADIXTOKENERR, t) ); return true }
+  { return parseInt(val, 8) }
 DecLiteral = val:(RealLiteral / IntegerLiteral) e:ExponentLiteral? { return val*10**e }
-HexLiteral = HexLiteralToken val:$HexDigitToken+ { return parseInt(val, 16) }
+HexLiteral = t:HexLiteralToken val:$HexDigitToken*
+  &{ if (val.length === 0) log(LEVEL.ERR, MSG.INVALIDNUM, sprintf(MSG.RADIXTOKENERR, t) ); return true }
+  { return parseInt(val, 16) }
 
 /* An exponent consists of a special token followed by an optional sign and a required set of decimal digits */
-ExponentLiteral = ExponentToken val:$(SignToken? DecDigitToken+) { return parseInt(val, 10) }
+ExponentLiteral = ExponentToken val:$(SignToken? DecDigitToken*)
+  &{ if (isNaN(parseInt(val, 10))) log(LEVEL.ERR, MSG.INVALIDNUM, MSG.EXPERR); return true }
+  { return parseInt(val, 10) }
 
 /* A decimal integer consists of a set of decimal digits */
 IntegerLiteral = val:$DecDigitToken+ { return parseInt(val, 10) }
 
 /* A decimal real consists of one or more decimal digits which are prefixed, postfixed or infixed with a special token */
 RealLiteral
-  = int:$DecDigitToken* DecimalPointToken frac:$DecDigitToken*
-    &{ return int.length + frac.length > 0 }
+  = int:$DecDigitToken* t:DecimalPointToken frac:$DecDigitToken*
+    &{ if (int.length + frac.length === 0) log(LEVEL.ERR, MSG.INVALIDNUM, sprintf(MSG.FRACTOKENERR, t) ); return true }
     { return parseFloat(`${int}.${frac}`, 10) }
 
 
@@ -277,12 +397,15 @@ RealLiteral
 // String
 
 StringLiteral
-  = DDDQToken
+  = l:DDDQToken
     value:( !(DDDQToken) SourceCharacter)* 
-    DDDQToken { return { type: 'Literal', value: value.flat().join('') } }
+    r:DDDQToken? &{ return isStringClosed(l, r) }
+    { return buildValue('StringLiteral', value.flat().join('')) }
   / l:(SQToken / DQToken) 
-    value:( !(t:(SQToken / DQToken)  &{ return l===t } / EscapeToken) SourceCharacter / EscapeSequence)* 
-    r:(SQToken / DQToken)  &{ return l===r } { return { type: 'Literal', value: value.flat().join('') } }
+    value:( !(t:(SQToken / DQToken)  &{ return l === t } / EscapeToken) SourceCharacter / EscapeSequence)* 
+    r:(SQToken / DQToken)? &{ return isStringClosed(l, r) }
+    { return buildValue('StringLiteral', value.flat().join('')) }
+
 
 EscapeSequence = EscapeToken char:(EscapeCharacter / SourceCharacter) { return char }
 EscapeCharacter
