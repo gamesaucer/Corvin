@@ -7,7 +7,7 @@
  *
  * Currently supported features:
  *
- *   - Nested block comments
+ *   - Line comments and nested block comments
  *   - Automatic semicolon insertion at the end of a block and EOF
  *   - Numeric literals can be specified in base 2, 8, 10 and 16
  *   - Decimal numeric literals can make use of a fractional component and/or exponents
@@ -34,17 +34,33 @@
     return value !== null ? value : []
   }
 
-  function buildExpression (name, head, tail) {
+  function buildUnaryExpression (name, head, tail) {
+    return tail.reduce((result, element) => ({
+      type: name + 'Expression',
+      operator: element[1],
+      prefix: !head,
+      argument: result || element[3],
+      location: getLocation(),
+    }), head)
+  }
+
+  function buildBinaryExpression (name, head, tail) {
     return tail.reduce((result, element) => ({
       type: name + 'Expression',
       operator: element[1],
       left: result,
       right: element[3],
+      location: getLocation(),
     }), head)
   }
 
   function buildValue(type, value) {
-    return { type, value }
+    return { type, value, location: getLocation() }
+  }
+
+  function getLocation() {
+    // Temporarily disabled to keep AST clean for debugging the parser
+    // return location()
   }
 }
 
@@ -121,101 +137,97 @@ PrimaryExpression
   = Identifier
   / Literal
 
-/* Postfix update expressions are non-associative */
-PostfixUpdateExpression
+/* Update expressions are non-associative */
+UpdateExpression
   = head:PrimaryExpression
     tail:(_ $UpdateOperator)?
-    { return buildExpression('Update', head, tail ? [tail] : []) }
-
-/* Prefix update expressions are non-associative */
-PrefixUpdateExpression
-  = PostfixUpdateExpression
-  / tail:(_ $UpdateOperator _ PostfixUpdateExpression)
-    { return buildExpression('Update', undefined , [tail]) }
+    { return buildUnaryExpression('Update', head, tail ? [tail] : []) }
+  / tail:(_ $UpdateOperator _ PrimaryExpression)
+    { return buildUnaryExpression('Update', undefined , [tail]) }
 
 /* Prefix expressions are right-associative */
 PrefixExpression
-  = PrefixUpdateExpression
+  = UpdateExpression
   / tail:(_ $PrefixOperator _ PrefixExpression)+
-    { return buildExpression('Prefix', undefined , tail) }
+    { return buildUnaryExpression('Prefix', undefined , tail) }
 
 /* Exponentiation expressions are right-associative */
 ExponentiationExpression
   = head:PrefixExpression
     tail:(_ $ExponentiationOperator _ ExponentiationExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Multiplicative expressions are left-associative */
 MultiplicativeExpression
   = head:ExponentiationExpression
     tail:(_ $MultiplicativeOperator _ ExponentiationExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Additive expressions are left-associative */
 AdditiveExpression
   = head:MultiplicativeExpression
     tail:(_ $AdditiveOperator _ MultiplicativeExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Bitshift expressions are left-associative */
 BitshiftExpression
   = head:AdditiveExpression
     tail:(_ $BitshiftOperator _ AdditiveExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Relational expressions are left-associative */
 RelationalExpression
   = head:BitshiftExpression
     tail:(_ $RelationalOperator _ BitshiftExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Equality expressions are left-associative */
 EqualityExpression
   = head:RelationalExpression
     tail:(_ $EqualityOperator _ RelationalExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Bitwise AND expressions are left-associative */
 BitwiseAndExpression
   = head:EqualityExpression
     tail:(_ $BitwiseAndOperator _ EqualityExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Bitwise XOR expressions are left-associative */
 BitwiseXorExpression
   = head:BitwiseAndExpression
     tail:(_ $BitwiseXorOperator _ BitwiseAndExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Bitwise OR expressions are left-associative */
 BitwiseOrExpression
   = head:BitwiseXorExpression
     tail:(_ $BitwiseOrOperator _ BitwiseXorExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Logical AND expressions are left-associative */
 LogicalAndExpression
   = head:BitwiseOrExpression
     tail:(_ $LogicalAndOperator _ BitwiseOrExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Logical XOR expressions are left-associative */
 LogicalXorExpression
   = head:LogicalAndExpression
     tail:(_ $LogicalXorOperator _ LogicalAndExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Logical OR expressions are left-associative */
 LogicalOrExpression
   = head:LogicalXorExpression
     tail:(_ $LogicalOrOperator _ LogicalXorExpression)*
-    { return buildExpression('Binary', head, tail) }
+    { return buildBinaryExpression('Binary', head, tail) }
 
 /* Assignment expressions are right-associative */
 AssignmentExpression
   = head:LogicalOrExpression
     tail:(_ $AssignmentOperator _ AssignmentExpression)*
-    { return buildExpression('Assignment', head, tail) }
+    { return buildBinaryExpression('Assignment', head, tail) }
 
 Expression = AssignmentExpression
 
