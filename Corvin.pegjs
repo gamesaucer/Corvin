@@ -7,10 +7,12 @@
  *
  * Currently supported features:
  *
- *   - Line comments and nested block comments
- *   - Automatic semicolon insertion at the end of a block and EOF
- *   - Numeric literals can be specified in base 2, 8, 10 and 16
- *   - Decimal numeric literals can make use of a fractional component and/or exponents
+ *   - Line comments and nested block comments.
+ *   - Automatic semicolon insertion at the end of a block and EOF.
+ *   - String literals using single or double quotes.
+ *   - String literals without escapes using triple double quotes.
+ *   - Numeric literals can be specified in base 2, 8, 10 and 16.
+ *   - Decimal numeric literals can make use of a fractional component and/or exponents.
  *   - Identifiers are recognised.
  *   - Many basic operators are recognised and obey precedence and associativity rules:
  *
@@ -64,7 +66,6 @@
   }
 
   function matchUnicodeCharacterCategories(char, categories) {
-  	console.log(char, categories)
     return categories
       .split(/(?=[A-Z])/)
       .some(category => char.match(new RegExp(`\\p{${category}}`,'u')))
@@ -244,7 +245,7 @@ Expression = AssignmentExpression
  * Literals
  */
 
-Literal = NumericLiteral
+Literal = NumericLiteral / StringLiteral
 
 
 
@@ -273,12 +274,44 @@ RealLiteral
 
 
 
+// String
+
+StringLiteral
+  = DDDQToken
+    value:( !(DDDQToken) SourceCharacter)* 
+    DDDQToken { return { type: 'Literal', value: value.flat().join('') } }
+  / l:(SQToken / DQToken) 
+    value:( !(t:(SQToken / DQToken)  &{ return l===t } / EscapeToken) SourceCharacter / EscapeSequence)* 
+    r:(SQToken / DQToken)  &{ return l===r } { return { type: 'Literal', value: value.flat().join('') } }
+
+EscapeSequence = EscapeToken char:(EscapeCharacter / SourceCharacter) { return char }
+EscapeCharacter
+  = "'"
+  / '"'
+  / "\\"
+  / "0"  { return "\0"; }
+  / "b"  { return "\b"; }
+  / "f"  { return "\f"; }
+  / "n"  { return "\n"; }
+  / "r"  { return "\r"; }
+  / "t"  { return "\t"; }
+  / "v"  { return "\v"; }
+  / "u" xxxx:$(HexDigitToken HexDigitToken HexDigitToken HexDigitToken) { return String.fromCharCode(parseInt(xxxx, 16)) }
+  / LineTerminatorSequence WhiteSpace* { return ""; }
+
+
 
 /**
  * Tokens
  */
 
 // Misc
+
+StringToken = DDDQToken / DQToken / SQToken
+DQToken = '"'
+DDDQToken = '"""'
+SQToken = "'"
+EscapeToken = '\\'
 
 LineCommentToken = '//'
 OpenBlockCommentToken = '/*'
