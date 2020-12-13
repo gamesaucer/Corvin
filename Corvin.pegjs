@@ -18,6 +18,7 @@
  *
  *   - Rudimentary error / warning logging that doesn't halt the parser.
  *
+ *   - Code blocks are recognised.
  *   - Many basic operators are recognised and obey precedence and associativity rules:
  *
  *        Unary: + - / ~ ! ++ -- 
@@ -88,7 +89,8 @@
   }
 
   function getLocation () {
-    return location()
+    const {line, column} = location().start
+    return { line, column }
   }
 
   function matchUnicodeCharacterCategories (char, categories) {
@@ -115,7 +117,7 @@
   function printLogs () {
     for (const level in logs) {
       logs[level].forEach(log => {
-        OUTPUT[level](log.message, `\n\ton line ${log.location.start.line} at position ${log.location.start.column}`)
+        OUTPUT[level](log.message, `\n\ton line ${log.location.line} at position ${log.location.column}`)
       })
     }
   }
@@ -146,8 +148,14 @@
     }), head)
   }
 
-  function buildValue(type, value) {
-    return { type, value, /*location: getLocation()*/ }
+  function buildValue(type, value, returns) {
+    return { type, value, returns, /*location: getLocation()*/ }
+  }
+
+  // Best run this only on a second pass, when identifiers can be more easily decoded.
+  function setExpressionReturnType (expression) {
+    // TODO implement
+    return expression
   }
 
 
@@ -186,21 +194,16 @@ Start = _ program:Program _ { return processParserOutput(program) }
  */
 
 Program
-  = body:SourceElementList? {
-      return {
-        type: 'Program',
-        body: listQmToList(body)
-      };
-    }
+  = body:SourceElementList? { return buildValue('Program', listQmToList(body)) }
 
 SourceElementList
   = head:SourceElement tail:(_ SourceElement)* {
       return buildListFromHeadTail(head, tail, 1)
     }
 
-SourceElement
-  = _ expr:Expression _ EOS _ { return expr }
-  / _ expr:EmptyExpression _ { return expr }
+SourceElement = _ statement:Statement _ { return statement }
+  /*= _ expr:Expression _ EOS _ { return expr }
+  / _ expr:EmptyExpression _ { return expr }*/
 
 
 
@@ -213,18 +216,6 @@ SourceElement
 
 __ = (WhiteSpace / LineTerminator / Comment)+ // Space required
 _ = __* // Space allowed
-
-
-
-// Automatic Semicolon Insertion
-
-EOS
-  = _ EOSToken
-  / _ &[})\]]
-  / _ EOF
-  / _ { log(LEVEL.ERR, MSG.MISSINGEOS) }
-
-EOF = !.
 
 
 
@@ -241,6 +232,35 @@ MultiLineComment
   = OpenBlockCommentToken 
     (!(CloseBlockCommentToken / OpenBlockCommentToken) . / MultiLineComment)* 
     CloseBlockCommentToken
+
+
+
+/**
+ * Statements
+ */
+
+Statement
+  = Block
+  / ExpressionStatement
+  / EmptyStatement
+
+ExpressionStatement = expr:Expression _ EOS { return expr }
+EmptyStatement = EOSToken { return buildValue('EmptyExpression', null, 'None') }
+
+Block
+  = OpenBlockToken _ body:SourceElementList? _ CloseBlockToken { return buildValue('Block', listQmToList(body)) }
+
+
+
+// Automatic Semicolon Insertion
+
+EOS
+  = _ EOSToken
+  / _ &(CloseBlockToken)
+  / _ EOF
+  / _ { log(LEVEL.ERR, MSG.MISSINGEOS) }
+
+EOF = !.
 
 
 
@@ -345,7 +365,6 @@ AssignmentExpression
     { return buildBinaryExpression('Assignment', head, tail) }
 
 Expression = AssignmentExpression
-EmptyExpression = EOSToken { return buildValue('EmptyExpression', null) }
 
 
 
@@ -364,7 +383,7 @@ NumericLiteral 'number'
   = val:(BinLiteral / OctLiteral / HexLiteral / DecLiteral) 
     &(t:$IdentifierName &{log(LEVEL.ERR, sprintf(MSG.UNEXPIDENT, t))})?
     &(t:$DecDigitToken &{log(LEVEL.ERR, sprintf(MSG.UNEXPNUM, t))})?
-    { return buildValue('NumericLiteral', val) }
+    { return buildValue('NumericLiteral', val, 'Number') }
 
 /* A literal of any base that's not 10 is preceded by a special token. Base 10 can be an int or a real, and may have an exponent.*/
 BinLiteral = t:BinLiteralToken val:$BinDigitToken* 
@@ -400,11 +419,11 @@ StringLiteral
   = l:DDDQToken
     value:( !(DDDQToken) SourceCharacter)* 
     r:DDDQToken? &{ return isStringClosed(l, r) }
-    { return buildValue('StringLiteral', value.flat().join('')) }
+    { return buildValue('StringLiteral', value.flat().join(''), 'String') }
   / l:(SQToken / DQToken) 
     value:( !(t:(SQToken / DQToken)  &{ return l === t } / EscapeToken) SourceCharacter / EscapeSequence)* 
     r:(SQToken / DQToken)? &{ return isStringClosed(l, r) }
-    { return buildValue('StringLiteral', value.flat().join('')) }
+    { return buildValue('StringLiteral', value.flat().join(''), 'String') }
 
 
 EscapeSequence = EscapeToken char:(EscapeCharacter / SourceCharacter) { return char }
@@ -435,6 +454,9 @@ DQToken = '"'
 DDDQToken = '"""'
 SQToken = "'"
 EscapeToken = '\\'
+
+OpenBlockToken = '{'
+CloseBlockToken = '}'
 
 LineCommentToken = '//'
 OpenBlockCommentToken = '/*'
@@ -481,7 +503,7 @@ AssignmentOperator = ( '**' / '*' / '/' / '%' / '+' / '-' / '>>' / '<<' / '^' / 
 
 /* Identifiers may not be keywords and must consist of a valid identifier name */
 Identifier 'identifier'
-  = /*!Keyword*/ ident:$IdentifierName { return buildValue('Identifier', ident) }
+  = /*!Keyword*/ ident:$IdentifierName { return buildValue('Identifier', ident)}
 
 /* Identifier names must begin with a valid starting character and continue with valid part characters */
 IdentifierName
