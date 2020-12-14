@@ -1,48 +1,98 @@
 /**
-* Corvin grammar (WIP)
-*
-* Used as a prototyping tool for designing Corvin.
-* No features are currently final.
-* More info here later.
-*
-* Currently supported features:
-*
-*   - Line comments and nested block comments.
-*   - Automatic semicolon insertion at the end of a block and EOF.
-*
-*   - Identifiers are supported.
-*   - String literals using single or double quotes.
-*   - String literals without escapes using triple double quotes.
-*   - Numeric literals can be specified in base 2, 8, 10 and 16.
-*   - Decimal numeric literals can make use of a fractional component and/or exponents.
-*
-*   - Rudimentary error / warning logging that doesn't halt the parser.
-*
-*   - Code blocks are supported.
-*   - If and if/else expressions are supported.
-*   - Many basic operators are supported and obey precedence and associativity rules:
-*
-*        Unary: + - / ~ ! ++ -- 
-*        Binary: ** * / % + - >> << >= > <= < == != & ^ | && ^^ ||
-*        Assignment: **= *= /= %= += -= >>= <<= ^= |= &= =
-*
-* Corvin © 2019-2020 @gamesaucer 
-*/
+ * Corvin grammar (WIP)
+ *
+ * Used as a prototyping tool for designing Corvin.
+ * No features are currently final.
+ * More info here later.
+ *
+ * Currently supported features:
+ *
+ *   - Line comments and nested block comments.
+ *
+ *       Nesting block comments is superior in two ways.
+ *       Firstly, if a block comment is accidentally opened, it's not
+ *       accidentally closed by an existing block comment after it. This means
+ *       that mistakes are far less likely to result in a valid but incorrect
+ *       program.
+ *       Secondly, if you ever wanted to comment out code that contains a block
+ *       comment already, you know how much of a pain it is, since the existing
+ *       block comment interferes with the block comment you're trying to create
+ *       in languages without nested block comments.
+ *
+ *   - Automatic semicolon insertion at the end of a block and EOF.
+ *
+ *       Corvin is able to detect many missing semicolon instances, but chooses
+ *       to reject most of these instances as incorrect programs, to avoid
+ *       a habit of omitting semicolons potentially leading to ambiguous statements
+ *       where two lines of code that are intended to be separate would interact.
+ *
+ *   - Identifiers are supported.
+ *
+ *       Identifiers must start with a letter, underscore or currency symbol, and
+ *       can contain numbers, connectors and combining marks afterwards.
+ *
+ *   - String literals using single or double quotes.
+ *   - String literals without escapes using triple double quotes.
+ *   - Numeric literals can be specified in base 2, 8, 10 and 16.
+ *
+ *       Non-decimal numbers use the (case-insensitive) prefixes 0b, 0o and 0x.
+ *
+ *   - Decimal numeric literals can make use of a fractional component and/or exponents.
+ *   - Rudimentary error / warning logging that doesn't halt the parser.
+ *
+ *       If the program is rejected, only logs will be produced.
+ *       Some errors still halt the parser, but my intention is to eliminate this
+ *       possibility as much as possible, to allow the parser to catch as many issues
+ *       in a single pass as possible, so as not to waste the programmer's time
+ *       correcting issues one at a time and having to parse the program again in
+ *       between.
+ *
+ *   - Code blocks are supported.
+ *   - If and if/else expressions are supported.
+ *
+ *       Corvin has no ternary, since if/else expressions are fully equivalent.
+ *
+ *   - Do, do-while, do-until, while and until loops are supported.
+ *
+ *       Do-while and do-until loops allow the condition to come either before or
+ *       after the block.
+ *       Do-loops are loops without a condition, and thus must be broken out of.
+ *       The difference between the while and until keywords is simply that "while"
+ *       repeats the loop while the condition is true, whereas "until" repeats it
+ *       while the condition is false.
+ *       There is no particular inherent reason to support both expressions of
+ *       this loop condition, but it may help programmers to more clearly get
+ *       across their intention. For example, try replacing the names of the
+ *       exit conditions in the following examples with more generic names, and
+ *       consider which of these three equivalent statements is the clearest:
+ *
+ *         until (exitCondition1 || exitCondition2) doSomething();
+ *         while (!exitCondition1 && !exitCondition2) doSomething();
+ *         while (!(exitCondition1 || exitCondition2)) doSomething();
+ *
+ *   - Many basic operators are supported and obey precedence and associativity rules:
+ *
+ *       Unary: + - / ~ ! ++ -- 
+ *       Binary: ** * / % + - >> << >= > <= < == != & ^ | && ^^ ||
+ *       Assignment: **= *= /= %= += -= >>= <<= ^= |= &= =
+ *
+ * Corvin © 2019-2020 @gamesaucer 
+ */
 
 
 
 /************************
-*                      *
-*    JS Initialiser    *
-*                      *
-************************/
+ *                      *
+ *    JS Initialiser    *
+ *                      *
+ ************************/
 
 
 
 {
   /**
-  * Constants
-  */
+   * Constants
+   */
 
   const logs = {}
   const LEVEL = { ERR: 0, WARN: 1, NOTE: 2 }
@@ -63,8 +113,8 @@
 
 
   /**
-  * Parser output
-  */
+   * Parser output
+   */
 
   function processParserOutput(program) {
     printLogs()
@@ -78,8 +128,8 @@
 
 
   /**
-  * Utility functions
-  */
+   * Utility functions
+   */
 
   function extractList (list, index) {
     return list.map(o => o[index])
@@ -89,30 +139,63 @@
     return [head].concat(extractList(tail, index))
   }
 
+  /**
+   * Makes sure that the provided value is an array by providing an empty array if it is not.
+   * @param {?Array} value - the array to guarantee
+   * @returns {Array} either the value or an empty array
+   */
   function listQmToList (value) {
-    return value !== null ? value : []
+    return value instanceof Array ? value : []
   }
 
+  /**
+   * Trims down the information in the standard location object to only the necessary parts.
+   * @returns {object} - location object with line and column properties
+   */
   function getLocation () {
     const {line, column} = location().start
     return { line, column }
   }
 
+  /**
+   * When given a single character and a string consisting of Unicode category identifiers,
+   * this function checks whether the character belongs to one of those categories.
+   * @param {string} char - the character to check
+   * @param {string} categories - the categories to check for
+   * @returns {boolean} - whether the character is in one of the provided categories
+   */
   function matchUnicodeCharacterCategories (char, categories) {
     return categories
       .split(/(?=[A-Z])/)
       .some(category => char.match(new RegExp(`\\p{${category}}`,'u')))
   }
 
-  function sprintf(string, ...vars) {
+  /**
+   * Inserts values into a template string and returns the string.
+   * Any occurrence of a % followed by a number is replaced by that index in the array of values.
+   * These occurrences cannot be escaped as this is only a rudimentary implementation.
+   * @param {string} string - the template string
+   * @param {Array} vars - the values to insert
+   * @returns {string} the template string with the values inserted
+   */
+  function sprintf (string, ...vars) {
     return string.replace(/%([0-9]+)/g, (_, n) => vars[n])
+  }
+
+  /**
+   * Converts a string to titlecase (first letter is uppercase, the rest lowercase)
+   * @param {?string} string - the string to titlecase
+   * @returns {string} the titlecased string
+   */
+  function titleCase (string) {
+    return string?.replace(/^(.)(.*)/, (_, u, l) => u.toUpperCase() + l.toLowerCase()) || ''
   }
 
 
 
   /**
-  * Logging
-  */
+   * Logging
+   */
 
   function log (type, ...message) {
     if (!logs[type]) logs[type] = []
@@ -130,8 +213,8 @@
 
 
   /**
-  * Expression builders
-  */
+   * Expression builders
+   */
 
   function buildUnaryExpression (name, head, tail) {
     return tail.reduce((result, element) => ({
@@ -166,8 +249,8 @@
 
 
   /**
-  * String validation
-  */
+   * String validation
+   */
 
   function isStringClosed(openQuote, closeQuote) {
     if (closeQuote) { 
@@ -183,10 +266,10 @@
 
 
 /*********************
-*                   *
-*    PEG Grammar    *
-*                   *
-*********************/
+ *                   *
+ *    PEG Grammar    *
+ *                   *
+ *********************/
 
 
 
@@ -195,8 +278,8 @@ Start = _ program:Program _ { return processParserOutput(program) }
 
 
 /**
-* Program
-*/
+ * Program
+ */
 
 Program
   = body:SourceElementList? { return buildValue('Program', listQmToList(body)) }
@@ -207,42 +290,12 @@ SourceElementList
     }
 
 SourceElement = _ statement:Statement _ { return statement }
-  /*= _ expr:Expression _ EOS _ { return expr }
-  / _ expr:EmptyExpression _ { return expr }*/
-
-
-
-
-/**
-* Lexical grammar
-*/
-
-// Whitespace & Control
-
-__ = (WhiteSpace / LineTerminator / Comment)+ // Space required
-_ = __* // Space allowed
-
-
-
-// Comments
-
-Comment 'comment'
-  = MultiLineComment / SingleLineComment
-
-SingleLineComment
-  = LineCommentToken
-    (!LineTerminator SourceCharacter)*
-
-MultiLineComment 
-  = OpenBlockCommentToken 
-    (!(CloseBlockCommentToken / OpenBlockCommentToken) . / MultiLineComment)* 
-    CloseBlockCommentToken
 
 
 
 /**
-* Statements
-*/
+ * Statements
+ */
 
 Statement
   = DeclarationStatement
@@ -272,11 +325,12 @@ EOF = !.
 
 
 /**
-* Expressions
-*/
+ * Expressions
+ */
 
 PrimaryExpression
   = BracketedExpression
+  / KeywordExpression
   / Identifier
   / Literal
   / Block
@@ -286,6 +340,42 @@ Block
 
 BracketedExpression
   = OpenTupleToken _ expr:Expression _ CloseTupleToken { return expr }
+
+
+
+// Keyword expressions
+
+ConditionalExpression
+  = IfKeyword _ test:(Block / Expression) _
+    consequent:(Block / Expression) _ ElseKeyword _
+    alternate:(Block / Expression)
+    { return { type:'Conditional', test, consequent, alternate } }
+  / IfKeyword _ test:(Block / Expression) _
+    consequent:(Block / Expression)
+    { return { type:'Conditional', test, consequent, alternate:[] } }
+
+DoExpression
+  = defer:DoKeyword? _ condition:WhileExpression _ consequent:(Block / Expression) {
+      return { 
+        type: titleCase(defer) + titleCase(condition.type) + 'Loop',
+        test: condition.test,
+        consequent 
+      }
+    }
+  / DoKeyword _ consequent:(Block / Expression) _ condition:WhileExpression? {
+    return { 
+      type:'Do' + titleCase(condition?.type) + 'Loop',
+      test: condition?.test || true,
+      consequent
+    }
+  }
+
+WhileExpression
+  = type:(WhileKeyword / UntilKeyword) _ test:(Block / Expression) { return {type, test} }
+
+KeywordExpression 
+  = ConditionalExpression
+  / DoExpression
 
 
 
@@ -377,20 +467,9 @@ LogicalOrExpression
     tail:(_ $LogicalOrOperator _ LogicalXorExpression)*
     { return buildBinaryExpression('Binary', head, tail) }
 
-/* Conditional expressions are right-associative */
-ConditionalExpression
-  = LogicalOrExpression
-  / IfKeyword _ test:(Block / Expression) _
-    consequent:(Block / Expression) _ ElseKeyword _
-    alternate:(Block / Expression)
-    { return { type:'Conditional', test, consequent, alternate } }
-  / IfKeyword _ test:(Block / Expression) _
-    consequent:(Block / Expression)
-    { return { type:'Conditional', test, consequent, alternate:[] } }
-
 /* Assignment expressions are right-associative */
 AssignmentExpression
-  = head:ConditionalExpression
+  = head:LogicalOrExpression
     tail:AssignmentExpressionTail*
     { return buildBinaryExpression('Assignment', head, tail) }
 AssignmentExpressionTail
@@ -401,8 +480,8 @@ Expression = AssignmentExpression
 
 
 /**
-* Literals
-*/
+ * Literals
+ */
 
 Literal = NumericLiteral / StringLiteral
 
@@ -447,6 +526,7 @@ RealLiteral
 
 // String
 
+/* A string literal consists of opening and closing quotes. If triple double quotes are used, characters aren't escaped.*/
 StringLiteral
   = l:DDDQToken
     value:( !(DDDQToken) SourceCharacter)* 
@@ -457,7 +537,7 @@ StringLiteral
     r:(SQToken / DQToken)? &{ return isStringClosed(l, r) }
     { return buildValue('StringLiteral', value.flat().join(''), 'String') }
 
-
+// TODO: Template strings
 EscapeSequence = EscapeToken char:(EscapeCharacter / SourceCharacter) { return char }
 EscapeCharacter
   = "'"
@@ -476,8 +556,8 @@ EscapeCharacter
 
 
 /**
-* Tokens
-*/
+ * Tokens
+ */
 
 // Misc
 
@@ -516,11 +596,15 @@ EOSToken = ';'
 // Keywords
 
 Keyword
-  = IfKeyword
+  = DoKeyword
   / ElseKeyword
+  / IfKeyword
 
-IfKeyword = 'if'
+DoKeyword = 'do'
 ElseKeyword = 'else'
+IfKeyword = 'if'
+UntilKeyword = 'until'
+WhileKeyword = 'while'
 
 
 
@@ -587,3 +671,26 @@ CombiningMark         = u:SourceCharacter &{ return matchUnicodeCharacterCategor
 Digit                 = u:SourceCharacter &{ return matchUnicodeCharacterCategories(u, 'Nd') }
 ConnectorPunctuation  = u:SourceCharacter &{ return matchUnicodeCharacterCategories(u, 'Pc') }
 CurrencySymbol        = u:SourceCharacter &{ return matchUnicodeCharacterCategories(u, 'Sc') }
+
+
+
+// Whitespace & Control
+
+__ = (WhiteSpace / LineTerminator / Comment)+ // Space required
+_ = __* // Space allowed
+
+
+
+// Comments
+
+Comment 'comment'
+  = MultiLineComment / SingleLineComment
+
+SingleLineComment
+  = LineCommentToken
+    (!LineTerminator SourceCharacter)*
+
+MultiLineComment 
+  = OpenBlockCommentToken 
+    (!(CloseBlockCommentToken / OpenBlockCommentToken) . / MultiLineComment)* 
+    CloseBlockCommentToken
