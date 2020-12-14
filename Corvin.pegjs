@@ -75,6 +75,23 @@
  *       Unary: + - / ~ ! ++ -- 
  *       Binary: ** * / % + - >> << >= > <= < == != & ^ | && ^^ ||
  *       Assignment: **= *= /= %= += -= >>= <<= ^= |= &= =
+ *       Other: ..
+ *
+ *       Most of these should be obvious, but a small handful require some explanation.
+ *       First, the logical XOR operator ^^ is missing from most langauges. I feel that
+ *       its inclusion as a counterpart to bitwise XOR is elegant, and it may in the
+ *       rare cases that one wants to XOR two booleans help get across the user's
+ *       intent.
+ *       There is also the range operator .., which can define any arbitrary range of
+ *       numbers (exlusive). A range given a range as its operand will concatenate the 
+ *       ranges. A range can have either or both of its operands omitted, in which case 
+ *       it will be considered to be Infinity (or -Infinity on the lefthand side). Lazy
+ *       evaluation will have to be employed to make full use of infinite ranges, and
+ *       I am as of yet unsure how interaction with a range of -Infinity..Infinity would
+ *       take place.
+ *       
+ *
+ *
  *
  * Corvin © 2019-2020 @gamesaucer 
  */
@@ -264,7 +281,6 @@
 
 
 
-
 /*********************
  *                   *
  *    PEG Grammar    *
@@ -355,18 +371,18 @@ ConditionalExpression
     { return { type:'Conditional', test, consequent, alternate:[] } }
 
 DoExpression
-  = defer:DoKeyword? _ condition:WhileExpression _ consequent:(Block / Expression) {
+  = defer:DoKeyword? _ condition:WhileExpression _ value:(Block / Expression) {
       return { 
         type: titleCase(defer) + titleCase(condition.type) + 'Loop',
         test: condition.test,
-        consequent 
+        value 
       }
     }
-  / DoKeyword _ consequent:(Block / Expression) _ condition:WhileExpression? {
+  / DoKeyword _ value:(Block / Expression) _ condition:WhileExpression? {
     return { 
       type:'Do' + titleCase(condition?.type) + 'Loop',
       test: condition?.test || true,
-      consequent
+      value
     }
   }
 
@@ -387,13 +403,13 @@ UpdateExpression
     tail:(_ $UpdateOperator)?
     { return buildUnaryExpression('Update', head, tail ? [tail] : []) }
   / tail:(_ $UpdateOperator _ PrimaryExpression)
-    { return buildUnaryExpression('Update', undefined , [tail]) }
+    { return buildUnaryExpression('Update', null , [tail]) }
 
 /* Prefix expressions are right-associative */
 PrefixExpression
   = UpdateExpression
   / tail:(_ $PrefixOperator _ PrefixExpression)+
-    { return buildUnaryExpression('Prefix', undefined , tail) }
+    { return buildUnaryExpression('Prefix', null , tail) }
 
 /* Exponentiation expressions are right-associative */
 ExponentiationExpression
@@ -467,9 +483,17 @@ LogicalOrExpression
     tail:(_ $LogicalOrOperator _ LogicalXorExpression)*
     { return buildBinaryExpression('Binary', head, tail) }
 
+/* Range expressions are left-associative */
+RangeExpression
+  = head:LogicalOrExpression
+    tail:(_ $RangeOperator _ LogicalOrExpression?)*
+    { return buildBinaryExpression('Range', head, tail) }
+  / tail:(_ $RangeOperator _ LogicalOrExpression?)+
+    { return buildBinaryExpression('Range', null , tail) }
+
 /* Assignment expressions are right-associative */
 AssignmentExpression
-  = head:LogicalOrExpression
+  = head:RangeExpression
     tail:AssignmentExpressionTail*
     { return buildBinaryExpression('Assignment', head, tail) }
 AssignmentExpressionTail
@@ -519,7 +543,7 @@ IntegerLiteral = val:$DecDigitToken+ { return parseInt(val, 10) }
 /* A decimal real consists of one or more decimal digits which are prefixed, postfixed or infixed with a special token */
 RealLiteral
   = int:$DecDigitToken* t:DecimalPointToken frac:$DecDigitToken*
-    &{ if (int.length + frac.length === 0) log(LEVEL.ERR, MSG.INVALIDNUM, sprintf(MSG.FRACTOKENERR, t) ); return true }
+    &{ int.length + frac.length > 0/*if (int.length + frac.length === 0) log(LEVEL.ERR, MSG.INVALIDNUM, sprintf(MSG.FRACTOKENERR, t) ); return true*/ }
     { return parseFloat(`${int}.${frac}`, 10) }
 
 
@@ -625,6 +649,7 @@ BitwiseOrOperator = '|'![=|]
 LogicalAndOperator = '&&'
 LogicalXorOperator = '^^'
 LogicalOrOperator = '||'
+RangeOperator = '..'
 AssignmentOperator = ( '**' / '*' / '/' / '%' / '+' / '-' / '>>' / '<<' / '^' / '|' / '&')? '='![=]
 
 
@@ -674,7 +699,7 @@ CurrencySymbol        = u:SourceCharacter &{ return matchUnicodeCharacterCategor
 
 
 
-// Whitespace & Control
+// Whitespace
 
 __ = (WhiteSpace / LineTerminator / Comment)+ // Space required
 _ = __* // Space allowed
