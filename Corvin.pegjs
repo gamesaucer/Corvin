@@ -410,16 +410,14 @@ Statement
   / EmptyStatement
   / Block
 
-/* TODO: blocks shouldn't require a semicolon after them.*/
 ExpressionStatement = expr:Expression _ EOS { return expr }
-EmptyStatement = EOSToken { return buildValue('EmptyExpression', null) }
-DeclarationStatement
-  = type:(TypeExpression / BracketedExpression) _ ident:Identifier tail:AssignmentExpressionTail+ _ EOS
-    { return { type:'DeclarationExpression', left:type, right:buildBinaryExpression('Assignment', ident, tail) } }
-  / type:(TypeExpression / BracketedExpression) _ ident:Identifier _ EOS
-    { return { type:'DeclarationExpression', left:type, right:ident } }
-KeywordStatement = expr:(ConditionalStatement / DoStatement)
+EmptyStatement = EOSToken { return buildValue('Empty', null) }
+DeclarationStatement = expr:DeclarationExpression _ EOS { return expr }
 Block = OpenBlockToken _ body:SourceElementList? _ CloseBlockToken { return buildValue('Block', listQmToList(body)) }
+KeywordStatement
+  = ConditionalStatement
+  / DoStatement
+  / ReturnStatement
 
 
 
@@ -446,8 +444,10 @@ DoStatement
     { return { type:'DoLoop', test: true, value } }
 
 DoCondition
-  = type:(WhileKeyword / UntilKeyword) _ test:(Expression) { return {type, test} }
+  = type:(WhileKeyword / UntilKeyword) _ test:Expression { return { type, test } }
 
+ReturnStatement
+  = ReturnKeyword _ value:Expression _ EOS { return { type:'Return', value } }
 
 
 // Automatic Semicolon Insertion
@@ -467,7 +467,8 @@ EOF = !.
  */
 
 PrimaryExpression
-  = BracketedExpression
+  = FunctionExpression
+  / BracketedExpression
   / ListExpression
   // KeywordExpression
   / Identifier
@@ -489,7 +490,25 @@ TypeExpression
     tail:(_ (BitwiseAndOperator / BitwiseOrOperator) _ TypeExpression)*
     { return buildBinaryExpression('Binary', head, tail) }
 
+DeclarationExpression
+  = type:(TypeExpression / BracketedExpression) _ ident:Identifier tail:AssignmentExpressionTail+
+    { return { type:'DeclarationExpression', left:type, right:buildBinaryExpression('Assignment', ident, tail) } }
+  / type:(TypeExpression / BracketedExpression) _ ident:Identifier
+    { return { type:'DeclarationExpression', left:type, right:ident } }
 
+///TODO: make blocks not require a semicolon.
+FunctionExpression
+  = left:ParameterList _ operator:ArrowOperator _ right:(Expression / Block) 
+    { return { type:'FunctionDeclaration', operator, left, right } }
+
+ParameterList
+  = item:ParameterListItem { return buildValue('ParameterList', [item]) }
+  / OpenTupleToken _ head:ParameterListItem tail:(_ SequenceToken _ ParameterListItem)* _ CloseTupleToken
+    { return buildValue('ParameterList', buildListFromHeadTail(head, tail, 3)) }
+
+ParameterListItem
+  = DeclarationExpression
+  / Identifier
 
 // Keyword expressions
 
@@ -743,12 +762,14 @@ Keyword
   = DoKeyword
   / ElseKeyword
   / IfKeyword
+  / ReturnKeyword
   / UntilKeyword
   / WhileKeyword
 
 DoKeyword = 'do'
 ElseKeyword = 'else'
 IfKeyword = 'if'
+ReturnKeyword = 'return'
 UntilKeyword = 'until'
 WhileKeyword = 'while'
 
@@ -756,6 +777,7 @@ WhileKeyword = 'while'
 
 // Operators
 
+ArrowOperator = '->' / '=>'
 MaybeOperator = '?'
 StaticAccessOperator = '.'
 PrefixOperator = '+'![+=] / '-'![-=] / '/'![=] / '~'![=] / '!' // '/' is the reciprocal
