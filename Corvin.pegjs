@@ -139,10 +139,14 @@
    */
 
   class Type {
-    constructor (fn, subtypes = {}, paramCount = 0) {
-      this.valueOfType = fn
-      this.subtypes = subtypes
+    constructor (isValueOfType, paramCount = 0) {
+      this.subTypes = {}
+      this.isValueOfType = isValueOfType
       this.paramCount = paramCount
+    }
+
+    setSubTypes(types) {
+      this.subTypes = types
     }
 
     /**
@@ -151,45 +155,62 @@
      * @param {Object} n - the value to return the type of
      * @returns {Type[]} - a list of subtypes itself, or nothing.
      */
-    valueType (n) {
-      /// TODO
-      return []
+    typesOfValue (n) {
+      if (!this.isValueOfType(n)) {
+        return []
+      } else {
+        const subValues = Object.values(this.subTypes).map(type => type.typesOfValue(n)).flat()
+        if (subValues.length === 0) {
+          return [this]
+        } else {
+          return subValues
+        }
+      } 
     }
   }
 
+  class C_Function {}
+  class C_Iterable {}
   class C_Maybe {}
   class C_Mutable {}
-  class C_Iterable {}
   class C_Map extends C_Iterable {}
-  class C_Function {}
+  class C_Type {}
 
-  const CHAR = new Type(n => n.length === 1 || ( n >= 0 && n <= 0x10FFFF ))
   const TYPES = {
+    Any: new Type(n => true),
+    Boolean: new Type(n => typeof n === 'boolean'),
+    Char: new Type(n => n.length === 1 || ( n >= 0 && n <= 0x10FFFF )),
+    Function: new Type(n => n instanceof C_Function, 1),
+    Integer: new Type(n => Math.trunc(n) === n),
+    Iterable: new Type(n => n instanceof C_Iterable),
+    Map: new Type(n => n instanceof C_Map, 2),
+    Maybe: new Type(n => n instanceof C_Maybe, 1),
+    Mutable: new Type(n => n instanceof C_Mutable, 1),
+    Negative: new Type(n => n < 0),
     None: new Type(n => false),
-    Any: new Type(n => true, {
-      Boolean: new Type(n => typeof n === 'boolean'),
-      Number: new Type(n => typeof n === 'number', {
-        Integer: new Type(n => Math.trunc(n) === n, {
-          Char: CHAR
-        }),
-        Unsigned: new Type(n => n >= 0, {
-          Positive: new Type(n => n > 0),
-          Zero: new Type(n => n === 0),
-        }),
-        Negative: new Type(n => n < 0),
-      }),
-      String: new Type(n => typeof n === 'string', {
-        Char: CHAR
-      }),
-      Maybe: new Type(n => n instanceof C_Maybe, {}, 1),
-      Mutable: new Type(n => n instanceof C_Mutable, {}, 1),
-      Iterable: new Type(n => n instanceof C_Iterable, {
-        Map: new Type(n => n instanceof C_Map, {}, 2),
-      }),
-      Function: new Type(n => n instanceof C_Function, {}, 1),
-    }),
+    Number: new Type(n => typeof n === 'number'),
+    Positive: new Type(n => n > 0),
+    Type: new Type(n => n instanceof C_Type),
+    String: new Type(n => typeof n === 'string'),
+    Unsigned: new Type(n => n >= 0),
+    Zero: new Type(n => n === 0),
   }
-  
+
+  TYPES.Any.setSubTypes([
+    TYPES.Boolean,
+    TYPES.Function,
+    TYPES.Iterable,
+    TYPES.Maybe,
+    TYPES.Mutable,
+    TYPES.Number,
+    TYPES.String,
+    TYPES.Type])
+  TYPES.Number.setSubTypes([TYPES.Integer, TYPES.Negative, TYPES.Unsigned])
+  TYPES.Integer.setSubTypes([TYPES.Char])
+  TYPES.Iterable.setSubTypes([TYPES.Map])
+  TYPES.String.setSubTypes([TYPES.Char])
+  TYPES.Unsigned.setSubTypes([TYPES.Positive, TYPES.Zero])
+
 
 
   /**
