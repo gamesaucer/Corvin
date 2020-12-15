@@ -476,7 +476,7 @@ AccessExpression
 /* Casting expressions are left-associative */
 CastingExpression
   = head:AccessExpression
-    tail:(_ $CastingOperator _ TypeExpression)*
+    tail:(_ $CastingOperator _ (TypeExpression / BracketedExpression))*
     { return buildBinaryExpression('Binary', head, tail) }
 
 /* Update expressions are non-associative */
