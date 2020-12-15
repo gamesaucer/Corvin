@@ -318,12 +318,14 @@ Statement
   / ExpressionStatement
   / EmptyStatement
 
+/* TODO: blocks shouldn't require a semicolon after them.*/
 ExpressionStatement = expr:Expression _ EOS { return expr }
 EmptyStatement = EOSToken { return buildValue('EmptyExpression', null, 'None') }
 DeclarationStatement
-  = type:Expression _ ident:Identifier tail:AssignmentExpressionTail+ _ EOS
+  = type:(TypeExpression / BracketedExpression) _ ident:Identifier tail:AssignmentExpressionTail+ _ EOS
     { return { type:'DeclarationExpression', left:type, right:buildBinaryExpression('Assignment', ident, tail) } }
-  / type:Expression _ ident:Identifier _ EOS { return { type:'DeclarationExpression', left:type, right:ident } }
+  / type:(TypeExpression / BracketedExpression) _ ident:Identifier _ EOS
+    { return { type:'DeclarationExpression', left:type, right:ident } }
 
 
 
@@ -356,6 +358,11 @@ Block
 
 BracketedExpression
   = OpenTupleToken _ expr:Expression _ CloseTupleToken { return expr }
+
+TypeExpression
+  = head:Identifier 
+    tail:(_ (BitwiseAndOperator / BitwiseOrOperator) _ TypeExpression)*
+    { return buildBinaryExpression('Binary', head, tail) }
 
 
 
