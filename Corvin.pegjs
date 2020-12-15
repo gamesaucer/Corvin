@@ -75,7 +75,7 @@
  *       Unary: + - / ~ ! ++ -- 
  *       Binary: ** * / % + - >> << >= > <= < == != & ^ | && ^^ ||
  *       Assignment: **= *= /= %= += -= >>= <<= ^= |= &= =
- *       Other: ..
+ *       Other: .. :: .
  *
  *       Most of these should be obvious, but a small handful require some explanation.
  *       First, the logical XOR operator ^^ is missing from most langauges. I feel that
@@ -89,6 +89,11 @@
  *       evaluation will have to be employed to make full use of infinite ranges, and
  *       I am as of yet unsure how interaction with a range of -Infinity..Infinity would
  *       take place.
+ *       The casting operator is ::. This is in stark contrast to C and C++, and here
+ *       should be read to mean "becomes". You're clarifying the type of the value
+ *       preceding it, for which a colon should be a natural symbol.
+ *       The static access operator is ., which Corvin shares with many other languages.
+ *       The computed access operator has not yet been implemented at this juncture.
  *       
  *
  *
@@ -127,6 +132,64 @@
     FRACTOKENERR: 'Fraction token "%0" not allowed by itself',
   }
 
+
+
+  /**
+   * AST compilation
+   */
+
+  class Type {
+    constructor (fn, subtypes = {}, paramCount = 0) {
+      this.valueOfType = fn
+      this.subtypes = subtypes
+      this.paramCount = paramCount
+    }
+
+    /**
+     * Will find more specific types for the return value if
+     * it belongs to any more specific types.
+     * @param {Object} n - the value to return the type of
+     * @returns {Type[]} - a list of subtypes itself, or nothing.
+     */
+    valueType (n) {
+      /// TODO
+      return []
+    }
+  }
+
+  class C_Maybe {}
+  class C_Mutable {}
+  class C_Iterable {}
+  class C_Map extends C_Iterable {}
+  class C_Function {}
+
+  const CHAR = new Type(n => n.length === 1 || ( n >= 0 && n <= 0x10FFFF ))
+  const TYPES = {
+    None: new Type(n => false),
+    Any: new Type(n => true, {
+      Boolean: new Type(n => typeof n === 'boolean'),
+      Number: new Type(n => typeof n === 'number', {
+        Integer: new Type(n => Math.trunc(n) === n, {
+          Char: CHAR
+        }),
+        Unsigned: new Type(n => n >= 0, {
+          Positive: new Type(n => n > 0),
+          Zero: new Type(n => n === 0),
+        }),
+        Negative: new Type(n => n < 0),
+      }),
+      String: new Type(n => typeof n === 'string', {
+        Char: CHAR
+      }),
+      Maybe: new Type(n => n instanceof C_Maybe, {}, 1),
+      Mutable: new Type(n => n instanceof C_Mutable, {}, 1),
+      Iterable: new Type(n => n instanceof C_Iterable, {
+        Map: new Type(n => n instanceof C_Map, {}, 2),
+      }),
+      Function: new Type(n => n instanceof C_Function, {}, 1),
+    }),
+  }
+  
 
 
   /**
@@ -404,12 +467,24 @@ KeywordExpression
 
 // Operators
 
+/* Accessors are left-associative */
+AccessExpression
+  = head:PrimaryExpression
+    tail:(_ $StaticAccessOperator _ Identifier)* 
+    { return buildBinaryExpression('Binary', head, tail) }
+
+/* Casting expressions are left-associative */
+CastingExpression
+  = head:AccessExpression
+    tail:(_ $CastingOperator _ TypeExpression)*
+    { return buildBinaryExpression('Binary', head, tail) }
+
 /* Update expressions are non-associative */
 UpdateExpression
-  = head:PrimaryExpression
+  = head:CastingExpression
     tail:(_ $UpdateOperator)?
     { return buildUnaryExpression('Update', head, tail ? [tail] : []) }
-  / tail:(_ $UpdateOperator _ PrimaryExpression)
+  / tail:(_ $UpdateOperator _ CastingExpression)
     { return buildUnaryExpression('Update', null , [tail]) }
 
 /* Prefix expressions are right-associative */
@@ -641,9 +716,11 @@ WhileKeyword = 'while'
 
 // Operators
 
+StaticAccessOperator = '.'
 PrefixOperator = '+'![+=] / '-'![-=] / '/'![=] / '~'![=] / '!' // '/' is the reciprocal
 UpdateOperator = '++'![=] / '--'![=]
 
+CastingOperator = '::'
 ExponentiationOperator = '**'![=]
 MultiplicativeOperator = '*'![*=] / '/'![=] / '%'![=]
 AdditiveOperator = '+'![+=] / '-'![-=]
