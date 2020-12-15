@@ -75,7 +75,7 @@
  *       Unary: + - / ~ ! ++ -- 
  *       Binary: ** * / % + - >> << >= > <= < == != & ^ | && ^^ ||
  *       Assignment: **= *= /= %= += -= >>= <<= ^= |= &= =
- *       Other: .. :: .
+ *       Other: .. :: . []
  *
  *       Most of these should be obvious, but a small handful require some explanation.
  *       First, the logical XOR operator ^^ is missing from most langauges. I feel that
@@ -93,7 +93,7 @@
  *       should be read to mean "becomes". You're clarifying the type of the value
  *       preceding it, for which a colon should be a natural symbol.
  *       The static access operator is ., which Corvin shares with many other languages.
- *       The computed access operator has not yet been implemented at this juncture.
+ *       The computed access operator is []. This operator is non-commutative.
  *       
  *
  *
@@ -130,7 +130,6 @@
     BADLOOP: 'Ambiguously declared loop; Cannot disambiguate between one "Do%0" and one "DoLoop" + one "%0".',
     EXPERR: 'Malformed exponent',
     RADIXTOKENERR: 'Radix token "%0" not allowed by itself',
-    FRACTOKENERR: 'Fraction token "%0" not allowed by itself',
   }
 
 
@@ -489,7 +488,10 @@ TypeExpression
 /* Accessors are left-associative */
 AccessExpression
   = head:PrimaryExpression
-    tail:(_ $StaticAccessOperator _ Identifier)* 
+    tail:(
+        _ $StaticAccessOperator _ Identifier
+      / _ (OpenAccessToken { return '[]' }) _ Expression _ CloseAccessToken
+    )* 
     { return buildBinaryExpression('Binary', head, tail) }
 
 /* Casting expressions are left-associative */
@@ -644,7 +646,7 @@ IntegerLiteral = val:$DecDigitToken+ { return parseInt(val, 10) }
 /* A decimal real consists of one or more decimal digits which are prefixed, postfixed or infixed with a special token */
 RealLiteral
   = int:$DecDigitToken* t:DecimalPointToken frac:$DecDigitToken*
-    &{ int.length + frac.length > 0/*if (int.length + frac.length === 0) log(LEVEL.ERR, MSG.INVALIDNUM, sprintf(MSG.FRACTOKENERR, t) ); return true*/ }
+    &{ int.length + frac.length > 0 }
     { return parseFloat(`${int}.${frac}`, 10) }
 
 
@@ -696,6 +698,8 @@ OpenBlockToken = '{'
 CloseBlockToken = '}'
 OpenTupleToken = '('
 CloseTupleToken = ')'
+OpenAccessToken = '['
+CloseAccessToken = ']'
 
 LineCommentToken = '//'
 OpenBlockCommentToken = '/*'
