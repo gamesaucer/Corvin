@@ -75,7 +75,7 @@
  *       Unary: + - / ~ ! ++ -- 
  *       Binary: ** * / % + - >> << >= > <= < == != & ^ | && ^^ ||
  *       Assignment: **= *= /= %= += -= >>= <<= ^= |= &= =
- *       Other: .. :: . []
+ *       Other: .. :: . [] ?. ?[]
  *
  *       Most of these should be obvious, but a small handful require some explanation.
  *       First, the logical XOR operator ^^ is missing from most langauges. I feel that
@@ -94,7 +94,10 @@
  *       preceding it, for which a colon should be a natural symbol.
  *       The static access operator is ., which Corvin shares with many other languages.
  *       The computed access operator is []. This operator is non-commutative.
- *       
+ *       Both operators have a "maybe" form which checks for potential None values and
+ *       only accesses the requested member if it's non-None. It also takes care of
+ *       any Maybe-type values it encounters, allowing Maybe-types to keep out of the
+ *       programmer's way as much as possible.
  *
  *
  *
@@ -489,8 +492,8 @@ TypeExpression
 AccessExpression
   = head:PrimaryExpression
     tail:(
-        _ $StaticAccessOperator _ Identifier
-      / _ (OpenAccessToken { return '[]' }) _ Expression _ CloseAccessToken
+        _ $(MaybeOperator? StaticAccessOperator) _ Identifier
+      / _ (m:MaybeOperator? OpenAccessToken { return (m || '') + '[]' }) _ Expression _ CloseAccessToken
     )* 
     { return buildBinaryExpression('Binary', head, tail) }
 
@@ -741,6 +744,7 @@ WhileKeyword = 'while'
 
 // Operators
 
+MaybeOperator = '?'
 StaticAccessOperator = '.'
 PrefixOperator = '+'![+=] / '-'![-=] / '/'![=] / '~'![=] / '!' // '/' is the reciprocal
 UpdateOperator = '++'![=] / '--'![=]
