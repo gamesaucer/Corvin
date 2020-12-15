@@ -31,6 +31,7 @@
  *       Identifiers must start with a letter, underscore or currency symbol, and
  *       can contain numbers, connectors and combining marks afterwards.
  *
+ *   - Tuples are supported.
  *   - String literals using single or double quotes.
  *   - String literals without escapes using triple double quotes.
  *   - Numeric literals can be specified in base 2, 8, 10 and 16.
@@ -75,7 +76,7 @@
  *       Unary: + - / ~ ! ++ -- 
  *       Binary: ** * / % + - >> << >= > <= < == != & ^ | && ^^ ||
  *       Assignment: **= *= /= %= += -= >>= <<= ^= |= &= =
- *       Other: .. :: . [] ?. ?[]
+ *       Other: .. :: . [] ?. ?[] ,
  *
  *       Most of these should be obvious, but a small handful require some explanation.
  *       First, the logical XOR operator ^^ is missing from most langauges. I feel that
@@ -98,6 +99,8 @@
  *       only accesses the requested member if it's non-None. It also takes care of
  *       any Maybe-type values it encounters, allowing Maybe-types to keep out of the
  *       programmer's way as much as possible.
+ *       The , is the sequence operator, used for creating lists of things. It doubles
+ *       as an elision, allowing empty expressions in tuples.
  *
  *
  *
@@ -465,9 +468,18 @@ EOF = !.
 
 PrimaryExpression
   = BracketedExpression
+  / ListExpression
   // KeywordExpression
   / Identifier
   / Literal
+
+ListExpression
+  = OpenTupleToken _ head:OptionalExpression tail:(_ SequenceToken _ OptionalExpression)* _ CloseTupleToken
+    { return buildValue('Tuple', buildListFromHeadTail(head, tail, 3)) }
+
+OptionalExpression
+  = Expression 
+  / _ { return buildValue('Empty', null) }
 
 BracketedExpression
   = OpenTupleToken _ expr:(Expression / Block) _ CloseTupleToken { return expr }
