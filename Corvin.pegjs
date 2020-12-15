@@ -127,6 +127,7 @@
     MISSINGEOS: 'Missing semicolon',
 
     // Detail
+    BADLOOP: 'Ambiguously declared loop; Cannot disambiguate between one "Do%0" and one "DoLoop" + one "%0".',
     EXPERR: 'Malformed exponent',
     RADIXTOKENERR: 'Radix token "%0" not allowed by itself',
     FRACTOKENERR: 'Fraction token "%0" not allowed by itself',
@@ -153,7 +154,7 @@
      * Will find more specific types for the return value if
      * it belongs to any more specific types.
      * @param {Object} n - the value to return the type of
-     * @returns {Type[]} - a list of subtypes itself, or nothing.
+     * @returns {Type[]} - a list of subtypes, itself, or nothing.
      */
     typesOfValue (n) {
       if (!this.isValueOfType(n)) {
@@ -337,8 +338,8 @@
     }), head)
   }
 
-  function buildValue(type, value, returns) {
-    return { type, value, returns, /*location: getLocation()*/ }
+  function buildValue(type, value) {
+    return { type, value, /* location: getLocation()*/ }
   }
 
   // Best run this only on a second pass, when identifiers can be more easily decoded.
@@ -399,18 +400,48 @@ SourceElement = _ statement:Statement _ { return statement }
 
 Statement
   = DeclarationStatement
+  / KeywordStatement
   / ExpressionStatement
   / EmptyStatement
+  / Block
 
 /* TODO: blocks shouldn't require a semicolon after them.*/
 ExpressionStatement = expr:Expression _ EOS { return expr }
-EmptyStatement = EOSToken { return buildValue('EmptyExpression', null, 'None') }
+EmptyStatement = EOSToken { return buildValue('EmptyExpression', null) }
 DeclarationStatement
   = type:(TypeExpression / BracketedExpression) _ ident:Identifier tail:AssignmentExpressionTail+ _ EOS
     { return { type:'DeclarationExpression', left:type, right:buildBinaryExpression('Assignment', ident, tail) } }
   / type:(TypeExpression / BracketedExpression) _ ident:Identifier _ EOS
     { return { type:'DeclarationExpression', left:type, right:ident } }
+KeywordStatement = expr:(ConditionalStatement / DoStatement)
+Block = OpenBlockToken _ body:SourceElementList? _ CloseBlockToken { return buildValue('Block', listQmToList(body)) }
 
+
+
+// Keyword statements
+
+ConditionalStatement
+  = IfKeyword _ test:(Expression) _
+    consequent:(Expression / Block) _ ElseKeyword _
+    alternate:((e:Expression _ EOS { return e }) / Block)
+    { return { type:'Conditional', test, consequent, alternate } }
+  / IfKeyword _ test:(Expression) _
+    consequent:((e:Expression _ EOS { return e }) / Block)
+    { return { type:'Conditional', test, consequent, alternate:[] } }
+
+DoStatement
+  = defer:DoKeyword? _ condition:DoCondition _ value:((e:Expression _ EOS { return e }) / Block) 
+    { return { type: titleCase(defer) + titleCase(condition.type) + 'Loop', test: condition.test, value } }
+  / DoKeyword _ value:(Expression / Block) _ 
+    condition:(&(
+      d:DoStatement? &{ if (d) log(LEVEL.ERR, MSG.MISSINGEOS, sprintf(MSG.BADLOOP, d.type)); return !d }
+    ) w:DoCondition { return w }) 
+    { return { type:'Do' + titleCase(condition.type) + 'Loop', test: condition.test, value } }
+  / DoKeyword _ value:(Block / (e:Expression _ EOS { return e })) 
+    { return { type:'DoLoop', test: true, value } }
+
+DoCondition
+  = type:(WhileKeyword / UntilKeyword) _ test:(Expression) { return {type, test} }
 
 
 
@@ -432,16 +463,12 @@ EOF = !.
 
 PrimaryExpression
   = BracketedExpression
-  / KeywordExpression
+  // KeywordExpression
   / Identifier
   / Literal
-  / Block
-
-Block
-  = OpenBlockToken _ body:SourceElementList? _ CloseBlockToken { return buildValue('Block', listQmToList(body)) }
 
 BracketedExpression
-  = OpenTupleToken _ expr:Expression _ CloseTupleToken { return expr }
+  = OpenTupleToken _ expr:(Expression / Block) _ CloseTupleToken { return expr }
 
 TypeExpression
   = head:Identifier 
@@ -452,37 +479,8 @@ TypeExpression
 
 // Keyword expressions
 
-ConditionalExpression
-  = IfKeyword _ test:(Block / Expression) _
-    consequent:(Block / Expression) _ ElseKeyword _
-    alternate:(Block / Expression)
-    { return { type:'Conditional', test, consequent, alternate } }
-  / IfKeyword _ test:(Block / Expression) _
-    consequent:(Block / Expression)
-    { return { type:'Conditional', test, consequent, alternate:[] } }
-
-DoExpression
-  = defer:DoKeyword? _ condition:WhileExpression _ value:(Block / Expression) {
-      return { 
-        type: titleCase(defer) + titleCase(condition.type) + 'Loop',
-        test: condition.test,
-        value 
-      }
-    }
-  / DoKeyword _ value:(Block / Expression) _ condition:WhileExpression? {
-    return { 
-      type:'Do' + titleCase(condition?.type) + 'Loop',
-      test: condition?.test || true,
-      value
-    }
-  }
-
-WhileExpression
-  = type:(WhileKeyword / UntilKeyword) _ test:(Block / Expression) { return {type, test} }
-
-KeywordExpression 
-  = ConditionalExpression
-  / DoExpression
+/*KeywordExpression 
+  = */
 
 
 
@@ -621,7 +619,7 @@ NumericLiteral 'number'
   = val:(BinLiteral / OctLiteral / HexLiteral / DecLiteral) 
     &(t:$IdentifierName &{log(LEVEL.ERR, sprintf(MSG.UNEXPIDENT, t))})?
     &(t:$DecDigitToken &{log(LEVEL.ERR, sprintf(MSG.UNEXPNUM, t))})?
-    { return buildValue('NumericLiteral', val, 'Number') }
+    { return buildValue('NumericLiteral', val) }
 
 /* A literal of any base that's not 10 is preceded by a special token. Base 10 can be an int or a real, and may have an exponent.*/
 BinLiteral = t:BinLiteralToken val:$BinDigitToken* 
@@ -658,11 +656,11 @@ StringLiteral
   = l:DDDQToken
     value:( !(DDDQToken) SourceCharacter)* 
     r:DDDQToken? &{ return isStringClosed(l, r) }
-    { return buildValue('StringLiteral', value.flat().join(''), 'String') }
+    { return buildValue('StringLiteral', value.flat().join('')) }
   / l:(SQToken / DQToken) 
     value:( !(t:(SQToken / DQToken)  &{ return l === t } / EscapeToken) SourceCharacter / EscapeSequence)* 
     r:(SQToken / DQToken)? &{ return isStringClosed(l, r) }
-    { return buildValue('StringLiteral', value.flat().join(''), 'String') }
+    { return buildValue('StringLiteral', value.flat().join('')) }
 
 // TODO: Template strings
 EscapeSequence = EscapeToken char:(EscapeCharacter / SourceCharacter) { return char }
@@ -726,6 +724,8 @@ Keyword
   = DoKeyword
   / ElseKeyword
   / IfKeyword
+  / UntilKeyword
+  / WhileKeyword
 
 DoKeyword = 'do'
 ElseKeyword = 'else'
