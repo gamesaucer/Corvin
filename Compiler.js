@@ -56,6 +56,7 @@ const TYPES = {
   Unsigned: new Type(n => n >= 0),
   Zero: new Type(n => n === 0)
 }
+TYPES.Int = TYPES.Integer
 
 TYPES.Any.setSubTypes([
   TYPES.Boolean,
@@ -72,9 +73,64 @@ TYPES.Iterable.setSubTypes([TYPES.Map])
 TYPES.String.setSubTypes([TYPES.Char])
 TYPES.Unsigned.setSubTypes([TYPES.Positive, TYPES.Zero])
 
+const GLOBAL_IDS = Object.keys(TYPES).reduce((t, key) => {
+  const s = {}
+  s[key] = TYPES.Type
+  return Object.assign(t, s)
+}, {})
+
 /**
  * Compiles the program. Doesn't do anything quite yet at the moment.
  */
-function compile () {
+function compile (program) {
+  deriveTypes(program, Object.assign({}, GLOBAL_IDS))
+  return program
+}
 
+function err (msg, ...args) {
+  console.error(args)
+  throw new Error(msg)
+}
+
+function deriveTypes (node, identifierList = {}) {
+  switch (node.type) {
+    case 'Program':
+    case 'Block': {
+      const scope = Object.assign({}, identifierList)
+      node.value.forEach(node => deriveTypes(node, scope))
+      node.returns = node.value[node.value.length - 1].returns
+    } break
+    case 'BinaryExpression':
+      deriveTypes(node.left, identifierList)
+      deriveTypes(node.right, identifierList)
+      node.returns = node.left.returns
+      break
+    case 'UnaryExpression':
+      deriveTypes(node.argument, identifierList)
+      node.returns = node.argument.returns
+      break
+    case 'Identifier':
+      node.returns = identifierList[node.value] || err('Identifier not previously declared', node.type, node.value, identifierList)
+      break
+    case 'DeclarationExpression':
+      identifierList[node.left.value] || err('Identifier not previously declared', node.type, node.left.value)
+      identifierList[node.right.value] = TYPES[node.left.value]
+      node.returns = TYPES[node.left.value]
+      break
+    case 'AssignmentExpression':
+      deriveTypes(node.left, identifierList)
+      deriveTypes(node.right, identifierList)
+      node.returns = node.right.returns
+      break
+    case 'Empty':
+      node.returns = TYPES.none
+      break
+    case 'NumericLiteral':
+    case 'StringLiteral':
+      node.returns = TYPES.Any.typesOfValue(node.value)
+      break
+    default:
+      console.warn('oops, forgot', node.type)
+      node.returns = TYPES.None
+  }
 }

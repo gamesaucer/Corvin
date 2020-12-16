@@ -415,7 +415,8 @@ TypeExpression
 
 DeclarationExpression
   = type:(TypeExpression / BracketedExpression) _ ident:Identifier tail:AssignmentExpressionTail+
-    { return { type:'DeclarationExpression', left:type, right:buildBinaryExpression('Assignment', ident, tail) } }
+    //{ return { type:'DeclarationExpression', left:type, right:buildBinaryExpression('Assignment', ident, tail) } }
+    { return buildBinaryExpression('Assignment', { type:'DeclarationExpression', left:type, right:ident }, tail) }
   / type:(TypeExpression / BracketedExpression) _ ident:Identifier
     { return { type:'DeclarationExpression', left:type, right:ident } }
 

@@ -1,5 +1,7 @@
 Int i;
-Int i = 1;
+i = 1;
+Int ii = 2;
+String s = "Hello World";
 
 Function doAThing = (Int a, Int b) => a + b;
 
