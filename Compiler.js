@@ -79,6 +79,38 @@ const GLOBAL_IDS = Object.keys(TYPES).reduce((t, key) => {
   return Object.assign(t, s)
 }, {})
 
+const LIBRARIES = {
+  std: {
+    out: {
+      print: console.log,
+      println: (...args) => console.log(...args, '\n')
+    },
+    math: {
+      // Constants
+      pi: Math.PI,
+      e: Math.E,
+
+      // Basic arithmetic
+      abs: Math.abs,
+      ceil: Math.ceil,
+      floor: Math.floor,
+      round: Math.round,
+      sign: Math.sign,
+      frac: n => n - Math.trunc,
+      trunc: Math.trunc,
+      min: Math.min,
+      max: Math.max,
+      clamp: (low, n, high) => Math.min(high, Math.max(n, low)),
+
+      // Advanced arithmetic
+      sqrt: Math.sqrt,
+      cbrt: Math.cbrt,
+      yrt: (x, y) => Math.pow(x, 1 / y),
+      pow: Math.pow
+    }
+  }
+}
+
 /**
  * Compiles the program. Doesn't do anything quite yet at the moment.
  */
@@ -123,7 +155,7 @@ function deriveTypes (node, identifierList = {}) {
       node.returns = node.right.returns
       break
     case 'Empty':
-      node.returns = TYPES.none
+      node.returns = TYPES.None
       break
     case 'NumericLiteral':
     case 'StringLiteral':
