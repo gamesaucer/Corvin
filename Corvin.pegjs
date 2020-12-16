@@ -134,7 +134,6 @@
     MISSINGEOS: 'Missing semicolon',
 
     // Detail
-    BADLOOP: 'Ambiguously declared loop; Cannot disambiguate between one "Do%0" and one "DoLoop" + one "%0".',
     EXPERR: 'Malformed exponent',
     RADIXTOKENERR: 'Radix token "%0" not allowed by itself',
   }
@@ -416,7 +415,8 @@ EmptyStatement = EOSToken { return buildValue('Empty', null) }
 DeclarationStatement = expr:DeclarationExpression _ EOS { return expr }
 Block = OpenBlockToken _ body:SourceElementList? _ CloseBlockToken { return buildValue('Block', listQmToList(body)) }
 KeywordStatement
-  = ConditionalStatement
+  = BreakStatement
+  / ConditionalStatement
   / DoStatement
   / ReturnStatement
 
@@ -437,9 +437,7 @@ DoStatement
   = defer:$DoKeyword? _ condition:DoCondition _ value:((e:Expression _ EOS { return e }) / Block) 
     { return { type: titleCase(defer) + titleCase(condition.type) + 'Loop', test: condition.test, value } }
   / DoKeyword _ value:(Expression / Block) _ 
-    condition:(&(
-      d:DoStatement? &{ if (d) log(LEVEL.ERR, MSG.MISSINGEOS, sprintf(MSG.BADLOOP, d.type)); return !d }
-    ) w:DoCondition { return w }) 
+    condition:DoCondition _ EOS
     { return { type:'Do' + titleCase(condition.type) + 'Loop', test: condition.test, value } }
   / DoKeyword _ value:(Block / (e:Expression _ EOS { return e })) 
     { return { type:'DoLoop', test: true, value } }
@@ -449,6 +447,9 @@ DoCondition
 
 ReturnStatement
   = ReturnKeyword _ value:Expression _ EOS { return { type:'Return', value } }
+
+BreakStatement
+  = BreakKeyword _ EOS { return { type:'Break' } }
 
 
 // Automatic Semicolon Insertion
@@ -761,19 +762,21 @@ EOSToken = ';'
 // Keywords
 
 Keyword
-  = DoKeyword
+  = BreakKeyword
+  / DoKeyword
   / ElseKeyword
   / IfKeyword
   / ReturnKeyword
   / UntilKeyword
   / WhileKeyword
 
-DoKeyword = 'do' !IdentifierPart
-ElseKeyword = 'else' !IdentifierPart
-IfKeyword = 'if' !IdentifierPart
-ReturnKeyword = 'return' !IdentifierPart
-UntilKeyword = 'until' !IdentifierPart
-WhileKeyword = 'while' !IdentifierPart
+BreakKeyword =  'break'   !IdentifierPart
+DoKeyword =     'do'      !IdentifierPart
+ElseKeyword =   'else'    !IdentifierPart
+IfKeyword =     'if'      !IdentifierPart
+ReturnKeyword = 'return'  !IdentifierPart
+UntilKeyword =  'until'   !IdentifierPart
+WhileKeyword =  'while'   !IdentifierPart
 
 
 
