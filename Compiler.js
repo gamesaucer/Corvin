@@ -228,9 +228,11 @@ function deriveTypes (node, identifierList = {}, extra = {}) {
     } break
     case 'FunctionDeclaration': {
       const scope = Object.assign({}, node.operator === '->' ? identifierList : GLOBAL_IDS)
+      const returns = []
       deriveTypes(node.left, scope, extra)
-      deriveTypes(node.right, scope, { ...extra, returnCb: n => node.returns.push(n.returns) })
-      node.returns.push(node.right.returns)
+      deriveTypes(node.right, scope, { ...extra, returnCb: n => returns.push(n.returns) })
+      returns.push(node.right.returns)
+      node.returns.push(getType(TYPES.Function, distinct(returns.flat(2))))
     } break
     case 'ParameterList':
       node.value.forEach(node => deriveTypes(node, identifierList, extra))
