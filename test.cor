@@ -1,0 +1,32 @@
+Int i;
+Int i = 1;
+
+Function doAThing = (Int a, Int b) => a + b;
+
+if (true) {
+  doAThing /* This is an inline comment */ ()
+} else {
+  impossible();
+  1*2*3
+}
+
+// This is a normal comment.
+
+doAThing(1, 2);
+
+;;;;
+
+/*
+  This is
+  /*
+    a nested
+  */
+  block comment
+*/
+
+// Todo: find a way to allow this without curly brackets
+do {
+  break;
+}
+do i++ while (i < 100);
+do until (i < 0) i--;
