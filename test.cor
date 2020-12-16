@@ -3,7 +3,15 @@ i = 1;
 Int ii = 2;
 String s = "Hello World";
 
-Function doAThing = (Int a, Int b) => a + b;
+Function doAThing = (Int a, Int b) => {
+  return a + b
+};
+
+Function impossible = (String s) => s + '!';
+
+if (false) {
+  5*6*7
+}
 
 if (true) {
   doAThing /* This is an inline comment */ ()
@@ -32,3 +40,13 @@ do {
 }
 do i++ while (i < 100);
 do until (i < 0) i--;
+
+while (false) 1;
+until (true) 2;
+
+// Should fail:
+// Function failure = () => i;
+Function success = () -> i;
+
+// Should fail:
+// return;

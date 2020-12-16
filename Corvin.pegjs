@@ -245,27 +245,29 @@
    */
 
   function buildUnaryExpression (name, head, tail) {
-    return tail.reduce((result, element) => ({
+    return tail.reduce((result, element) => buildCustomValue({
       type: name + 'Expression',
       operator: element[1],
       prefix: !head,
       argument: result || element[3],
-      //location: getLocation(),
     }), head)
   }
 
   function buildBinaryExpression (name, head, tail) {
-    return tail.reduce((result, element) => ({
+    return tail.reduce((result, element) => buildCustomValue({
       type: name + 'Expression',
       operator: element[1],
       left: result,
       right: element[3],
-      //location: getLocation(),
     }), head)
   }
 
   function buildValue(type, value) {
-    return { type, value, /* location: getLocation()*/ }
+    return buildCustomValue({ type, value })
+  }
+
+  function buildCustomValue(o) {
+    return { ...o, location: getLocation() }
   }
 
   // Best run this only on a second pass, when identifiers can be more easily decoded.
@@ -349,28 +351,30 @@ ConditionalStatement
   = IfKeyword _ test:(Expression) _
     consequent:(Expression / Block) _ ElseKeyword _
     alternate:((e:Expression _ EOS { return e }) / Block)
-    { return { type:'Conditional', test, consequent, alternate } }
+    { return buildCustomValue({ type:'Conditional', test, consequent, alternate }) }
   / IfKeyword _ test:(Expression) _
     consequent:((e:Expression _ EOS { return e }) / Block)
-    { return { type:'Conditional', test, consequent, alternate:[] } }
+    { return buildCustomValue({ type:'Conditional', test, consequent, alternate:null }) }
 
 DoStatement
   = defer:$DoKeyword? _ condition:DoCondition _ value:((e:Expression _ EOS { return e }) / Block) 
-    { return { type: titleCase(defer) + titleCase(condition.type) + 'Loop', test: condition.test, value } }
+    { return buildCustomValue({ type: titleCase(defer) + titleCase(condition.type) + 'Loop', test: condition.test, value }) }
   / DoKeyword _ value:(Expression / Block) _ 
     condition:DoCondition _ EOS
-    { return { type:'Do' + titleCase(condition.type) + 'Loop', test: condition.test, value } }
+    { return buildCustomValue({ type:'Do' + titleCase(condition.type) + 'Loop', test: condition.test, value }) }
   / DoKeyword _ value:(Block / (e:Expression _ EOS { return e })) 
-    { return { type:'DoLoop', test: true, value } }
+    { return buildCustomValue({ type:'DoLoop', test: true, value }) }
 
 DoCondition
   = type:$(WhileKeyword / UntilKeyword) _ test:Expression { return { type, test } }
 
 ReturnStatement
-  = ReturnKeyword _ value:Expression _ EOS { return { type:'Return', value } }
+  = ReturnKeyword _ value:Expression? _ EOS 
+    { return buildCustomValue({ type:'Return', value: value || buildValue('Empty', null) }) }
 
 BreakStatement
-  = BreakKeyword _ EOS { return { type:'Break' } }
+  = BreakKeyword _ value:Expression? _ EOS 
+    { return buildCustomValue({ type:'Break', value: value || buildValue('Empty', null) }) }
 
 
 // Automatic Semicolon Insertion
@@ -394,8 +398,8 @@ PrimaryExpression
   / BracketedExpression
   / ListExpression
   // KeywordExpression
-  / Identifier
   / Literal
+  / Identifier
 
 ListExpression
   = OpenTupleToken _ head:OptionalExpression tail:(_ SequenceToken _ OptionalExpression)* _ CloseTupleToken
@@ -415,20 +419,21 @@ TypeExpression
 
 DeclarationExpression
   = type:(TypeExpression / BracketedExpression) _ ident:Identifier tail:AssignmentExpressionTail+
-    //{ return { type:'DeclarationExpression', left:type, right:buildBinaryExpression('Assignment', ident, tail) } }
-    { return buildBinaryExpression('Assignment', { type:'DeclarationExpression', left:type, right:ident }, tail) }
+    { return buildBinaryExpression('Assignment', buildCustomValue({ type:'DeclarationExpression', left:type, right:ident }), tail) }
   / type:(TypeExpression / BracketedExpression) _ ident:Identifier
-    { return { type:'DeclarationExpression', left:type, right:ident } }
+    { return buildCustomValue({ type:'DeclarationExpression', left:type, right:ident }) }
 
 ///TODO: make blocks not require a semicolon.
 FunctionExpression
   = left:ParameterList _ operator:ArrowOperator _ right:(Expression / Block) 
-    { return { type:'FunctionDeclaration', operator, left, right } }
+    { return buildCustomValue({ type:'FunctionDeclaration', operator, left, right }) }
 
 ParameterList
   = item:ParameterListItem { return buildValue('ParameterList', [item]) }
   / OpenTupleToken _ head:ParameterListItem tail:(_ SequenceToken _ ParameterListItem)* _ CloseTupleToken
     { return buildValue('ParameterList', buildListFromHeadTail(head, tail, 3)) }
+  / OpenTupleToken _ CloseTupleToken
+    { return buildValue('ParameterList', []) }
 
 ParameterListItem
   = DeclarationExpression
@@ -569,7 +574,13 @@ Expression = AssignmentExpression
  * Literals
  */
 
-Literal = NumericLiteral / StringLiteral
+Literal = NumericLiteral / StringLiteral / BooleanLiteral
+
+// Boolean
+
+BooleanLiteral
+  = TrueKeyword { return buildValue('BooleanLiteral', true) }
+  / FalseKeyword { return buildValue('BooleanLiteral', false) }
 
 
 
@@ -687,16 +698,20 @@ Keyword
   = BreakKeyword
   / DoKeyword
   / ElseKeyword
+  / FalseKeyword
   / IfKeyword
   / ReturnKeyword
+  / TrueKeyword
   / UntilKeyword
   / WhileKeyword
 
 BreakKeyword =  'break'   !IdentifierPart
 DoKeyword =     'do'      !IdentifierPart
 ElseKeyword =   'else'    !IdentifierPart
+FalseKeyword =  'false'   !IdentifierPart
 IfKeyword =     'if'      !IdentifierPart
 ReturnKeyword = 'return'  !IdentifierPart
+TrueKeyword =   'true'    !IdentifierPart
 UntilKeyword =  'until'   !IdentifierPart
 WhileKeyword =  'while'   !IdentifierPart
 
