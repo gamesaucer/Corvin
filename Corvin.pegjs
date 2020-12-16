@@ -434,7 +434,7 @@ ConditionalStatement
     { return { type:'Conditional', test, consequent, alternate:[] } }
 
 DoStatement
-  = defer:DoKeyword? _ condition:DoCondition _ value:((e:Expression _ EOS { return e }) / Block) 
+  = defer:$DoKeyword? _ condition:DoCondition _ value:((e:Expression _ EOS { return e }) / Block) 
     { return { type: titleCase(defer) + titleCase(condition.type) + 'Loop', test: condition.test, value } }
   / DoKeyword _ value:(Expression / Block) _ 
     condition:(&(
@@ -445,7 +445,7 @@ DoStatement
     { return { type:'DoLoop', test: true, value } }
 
 DoCondition
-  = type:(WhileKeyword / UntilKeyword) _ test:Expression { return { type, test } }
+  = type:$(WhileKeyword / UntilKeyword) _ test:Expression { return { type, test } }
 
 ReturnStatement
   = ReturnKeyword _ value:Expression _ EOS { return { type:'Return', value } }
@@ -768,12 +768,12 @@ Keyword
   / UntilKeyword
   / WhileKeyword
 
-DoKeyword = 'do'
-ElseKeyword = 'else'
-IfKeyword = 'if'
-ReturnKeyword = 'return'
-UntilKeyword = 'until'
-WhileKeyword = 'while'
+DoKeyword = 'do' !IdentifierPart
+ElseKeyword = 'else' !IdentifierPart
+IfKeyword = 'if' !IdentifierPart
+ReturnKeyword = 'return' !IdentifierPart
+UntilKeyword = 'until' !IdentifierPart
+WhileKeyword = 'while' !IdentifierPart
 
 
 
