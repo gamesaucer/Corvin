@@ -50,3 +50,11 @@ Function success = () -> i;
 
 // Should fail:
 // return;
+
+// Should fail
+/*
+{
+  Int scopeViolation = 10;
+}
+scopeViolation += 1;
+*/
