@@ -31,6 +31,7 @@
  *       Identifiers must start with a letter, underscore or currency symbol, and
  *       can contain numbers, connectors and combining marks afterwards.
  *
+ *   - Functions are supported.
  *   - Tuples are supported.
  *   - String literals using single or double quotes.
  *   - String literals without escapes using triple double quotes.
@@ -525,6 +526,7 @@ AccessExpression
     tail:(
         _ $(MaybeOperator? StaticAccessOperator) _ Identifier
       / _ (m:MaybeOperator? OpenAccessToken { return (m || '') + '[]' }) _ Expression _ CloseAccessToken
+      / _ ( _ { return '()' }) _ ListExpression
     )* 
     { return buildBinaryExpression('Binary', head, tail) }
 
